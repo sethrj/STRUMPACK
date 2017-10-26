@@ -1,4 +1,4 @@
-// #define CHECK_ERROR 0
+// #define CHECK_ERROR_DENSE 1
 #define CHECK_ERROR_RANDOMIZED 1
 
 #include <iostream>
@@ -126,12 +126,15 @@ int run(int argc, char* argv[]) {
     return 1;
   }
 
+  // cout << "# GC: Printing some info:" << endl;
+  // H.print_info();
+
   double Amem = m*m*sizeof(double);
   cout << "# rank(H) = " << H.rank() << endl;
   cout << "# memory(H) = " << H.memory()/1e6 << " MB, "
        << 100. * H.memory() / Amem << "% of dense" << endl;
 
-#if defined(CHECK_ERROR)
+#if defined(CHECK_ERROR_DENSE)
   DenseMatrix<double> I(m, m), A(m, m), At(m, m);
   I.eye();
   A.zero();
@@ -141,7 +144,7 @@ int run(int argc, char* argv[]) {
   Hdense.scaled_add(-1., A);
   auto HnormF = Hdense.normF();
   auto AnormF = A.normF();
-  cout << "# relative error = ||A-H*I||_F/||A||_F = "
+  cout << "# relative error to dense= ||A-H*I||_F/||A||_F = "
        << HnormF / AnormF << endl;
 #endif
 
@@ -154,7 +157,8 @@ int run(int argc, char* argv[]) {
   At_norm_est.clear();
   DenseMatrix<double> H_norm_check = H.apply(norm_check);
   H_norm_check.scaled_add(-1., A_norm_est);
-  cout << "# relative error est = ||(A*R)-(H*R)||_F/||A*R||_F = "
+  cout << "# relative error to samples("
+       << r << ") = ||(A*R)-(H*R)||_F/||A*R||_F = "
        << H_norm_check.normF() / A_norm_est.normF() << endl;
   A_norm_est.clear();
 #endif
