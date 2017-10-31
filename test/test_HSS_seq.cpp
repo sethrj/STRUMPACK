@@ -122,8 +122,10 @@ int run(int argc, char* argv[]) {
   }
   hss_opts.set_from_command_line(argc, argv);
 
+  // here
+
   if (hss_opts.verbose()) A.print("A");
-  cout << "# tol = " << hss_opts.rel_tol() << endl;
+  cout << "# rel_tol = " << hss_opts.rel_tol() << endl;
 
   HSSMatrix<double> H(A, hss_opts);
   if (H.is_compressed()) {
@@ -139,17 +141,21 @@ int run(int argc, char* argv[]) {
   cout << "# memory(H) = " << H.memory()/1e6 << " MB, "
        << 100. * H.memory() / A.memory() << "% of dense" << endl;
 
-  // H.print_info();
+  if (hss_opts.verbose()) H.print_info();
+  
   auto Hdense = H.dense();
   Hdense.scaled_add(-1., A);
-  cout << "# relative error = ||A-H*I||_F/||A||_F = "
+  cout << "# relative error to dense = ||A-H*I||_F/||A||_F = "
        << Hdense.normF() / A.normF() << endl;
-  cout << "# absolute error = ||A-H*I||_F = " << Hdense.normF() << endl;
+  cout << "# absolute error to dense = ||A-H*I||_F = " << Hdense.normF() << endl;
   if (Hdense.normF() / A.normF() > ERROR_TOLERANCE
       * max(hss_opts.rel_tol(),hss_opts.abs_tol())) {
     cout << "ERROR: compression error too big!!" << endl;
     return 1;
   }
+
+  cout << "Exiting" << endl;
+  return 0;
 
   if (!H.leaf()) {
     double beta = 0.;
@@ -202,7 +208,7 @@ int run(int argc, char* argv[]) {
   }
   cout << ex_err/iex << endl;
   if (ex_err / iex > ERROR_TOLERANCE
-      * max(hss_opts.rel_tol(),hss_opts.abs_tol())) {
+    * max(hss_opts.rel_tol(),hss_opts.abs_tol())) {
     cout << "ERROR: extraction error too big!!" << endl;
     return 1;
   }
