@@ -136,7 +136,25 @@ int run(int argc, char* argv[]) {
 
   IUV Amf(ctxt, alpha, beta, m, rk, decay_val);
 
+
+  auto start = std::chrono::system_clock::now();
   HSSMatrixMPI<double> H(m, m, Amf, ctxt, Amf, hss_opts, MPI_COMM_WORLD);
+  auto end = std::chrono::system_clock::now();
+
+  std::chrono::duration<double> elapsed_seconds = end-start;
+  // std::chrono::duration<double> elapsed_seconds_max;
+  // auto durationMax = std::chrono::system_clock::now();
+  double d_elapsed_seconds = elapsed_seconds.count();
+  double d_elapsed_seconds_max;
+  MPI_Reduce(&d_elapsed_seconds, &d_elapsed_seconds_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+  // std::chrono::duration<double> elapsed_seconds = end-start;
+  // std::cout << "## Compression elapsed time: " << elapsed_seconds.count() << "s\n";
+
+  if(!mpi_rank()){
+    std::cout << "## Compression elapsed time(max): " << d_elapsed_seconds_max << "s\n";
+  }
+
 
   if (H.is_compressed()) {
     if (!mpi_rank()) {
