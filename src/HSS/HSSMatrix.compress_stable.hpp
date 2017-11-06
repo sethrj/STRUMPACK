@@ -168,10 +168,14 @@ namespace strumpack {
       int u_rows = this->leaf() ? this->rows() :
         this->_ch[0]->U_rank()+this->_ch[1]->U_rank();
       DenseMW_t lSr(u_rows, d+dd, Sr, w.offset.second, 0);
+      
+      // _U.rows() gives the number of rows in U, this->rows() is the number of rows in that HSS block
+      // printf("U(%d)\n",this->rows());  //here
+
       if (d+dd >= opts.max_rank() || d+dd >= int(u_rows) ||
           update_orthogonal_basis
           (opts, w.U_r_max, lSr, w.Qr, d, dd,
-           this->_U_state == State::UNTOUCHED, depth)) {
+           this->_U_state == State::UNTOUCHED, depth, this->rows(), true)) {
         w.Qr.clear();
         auto f0 = params::flops;
         lSr.ID_row(_U.E(), _U.P(), w.Jr, opts.rel_tol(), opts.abs_tol(),
@@ -205,7 +209,7 @@ namespace strumpack {
       if (d+dd >= opts.max_rank() || d+dd >= v_rows ||
           update_orthogonal_basis
           (opts, w.V_r_max, lSc, w.Qc, d, dd,
-           this->_V_state == State::UNTOUCHED, depth)) {
+           this->_V_state == State::UNTOUCHED, depth, this->rows(), false)) {
         w.Qc.clear();
         auto f0 = params::flops;
         lSc.ID_row(_V.E(), _V.P(), w.Jc, opts.rel_tol(), opts.abs_tol(),
@@ -272,7 +276,7 @@ namespace strumpack {
     HSSMatrix<scalar_t>::update_orthogonal_basis
     (const opts_t& opts, scalar_t& r_max_0,
      const DenseM_t& S, DenseM_t& Q, int d, int dd,
-     bool untouched, int depth) {
+     bool untouched, int depth, int basis_size, bool coming_from_U) {
       int m = S.rows();
       if (d >= m) return true;
       Q.resize(m, d+dd);
@@ -291,8 +295,18 @@ namespace strumpack {
       Q2.orthogonalize(r_max, r_min, depth);
       if (untouched) r_max_0 = r_max;
       if (std::abs(r_min) < opts.abs_tol() ||
-          std::abs(r_min / r_max_0) < opts.rel_tol())
-        return true;
+          std::abs(r_min / r_max_0) < opts.rel_tol()){
+
+          if (coming_from_U) { 
+            if ( std::abs(r_min) < opts.abs_tol() )
+            printf("GC ABS U(%d) | r_min         = %1.2e  opts.abs_tol() = %1.2e \n", basis_size, r_min, opts.abs_tol()); //here
+            
+            if (std::abs(r_min / r_max_0) < opts.rel_tol())
+            printf("GC REL U(%d) | r_min/r_max_0 = %1.2e  opts.rel_tol() = %1.2e \n", basis_size, r_min/r_max_0, opts.rel_tol()); //here
+          }
+          
+          return true;
+        }
       params::QR_flops += params::flops - f0;
       DenseMW_t Q3(m, dd, Q, 0, d);
       DenseM_t Q12tQ3(Q12.cols(), Q3.cols());

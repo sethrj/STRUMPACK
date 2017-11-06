@@ -129,7 +129,8 @@ namespace strumpack {
       bool update_orthogonal_basis
       (const opts_t& opts, scalar_t& r_max_0,
        const DenseM_t& S, DenseM_t& Q,
-       int d, int dd, bool untouched, int depth);
+       int d, int dd, bool untouched, int depth, int basis_size,
+       bool coming_from_U);
       void set_U_full_rank(WorkCompress<scalar_t>& w);
       void set_V_full_rank(WorkCompress<scalar_t>& w);
 
@@ -406,7 +407,12 @@ namespace strumpack {
     template<typename scalar_t> void HSSMatrix<scalar_t>::print_info
     (std::ostream &out, std::size_t roff, std::size_t coff) const {
       if (!this->active()) return;
-      out << "SEQ rank=" << mpi_rank() << " b = [" << roff << "," << roff+this->rows()
+      int flag, rank;
+      MPI_Initialized(&flag);
+      if (flag) rank = mpi_rank();
+      else rank = 0;
+      out << "SEQ rank=" << rank
+          << " b = [" << roff << "," << roff+this->rows()
           << " x " << coff << "," << coff+this->cols() << "]  U = "
           << this->U_rows() << " x " << this->U_rank() << " V = "
           << this->V_rows() << " x " << this->V_rank();

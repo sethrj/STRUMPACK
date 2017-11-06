@@ -1,8 +1,9 @@
-// #define CHECK_ERROR 0
+// #define CHECK_ERROR_DENSE 1
 #define CHECK_ERROR_RANDOMIZED 1
 
 #include <iostream>
 #include <random>
+
 using namespace std;
 
 #include "DenseMatrix.hpp"
@@ -115,7 +116,14 @@ int run(int argc, char* argv[]) {
   cout << "# dd = " << hss_opts.dd() << endl;
 
   HSSMatrix<double> H(m, m, hss_opts);
+
+  auto start = std::chrono::system_clock::now();
   H.compress(Amf, Amf, hss_opts);
+  auto end = std::chrono::system_clock::now();
+
+  std::chrono::duration<double> elapsed_seconds = end-start;
+  std::cout << "## Compression elapsed time: " << elapsed_seconds.count() << "s\n";
+
   if (H.is_compressed()) {
     cout << "# created H matrix of dimension "
          << H.rows() << " x " << H.cols()
@@ -126,12 +134,15 @@ int run(int argc, char* argv[]) {
     return 1;
   }
 
+  // cout << "# GC: Printing some info:" << endl;
+  // H.print_info();
+
   double Amem = m*m*sizeof(double);
-  cout << "# rank(H) = " << H.rank() << endl;
-  cout << "# memory(H) = " << H.memory()/1e6 << " MB, "
+  cout << "## Max rank(H) = " << H.rank() << endl;
+  cout << "## Memory(H) = " << H.memory()/1e6 << " MB, "
        << 100. * H.memory() / Amem << "% of dense" << endl;
 
-#if defined(CHECK_ERROR)
+#if defined(CHECK_ERROR_DENSE)
   DenseMatrix<double> I(m, m), A(m, m), At(m, m);
   I.eye();
   A.zero();
@@ -141,7 +152,7 @@ int run(int argc, char* argv[]) {
   Hdense.scaled_add(-1., A);
   auto HnormF = Hdense.normF();
   auto AnormF = A.normF();
-  cout << "# relative error = ||A-H*I||_F/||A||_F = "
+  cout << "# Relative error to dense= ||A-H*I||_F/||A||_F = "
        << HnormF / AnormF << endl;
 #endif
 
@@ -154,7 +165,8 @@ int run(int argc, char* argv[]) {
   At_norm_est.clear();
   DenseMatrix<double> H_norm_check = H.apply(norm_check);
   H_norm_check.scaled_add(-1., A_norm_est);
-  cout << "# relative error est = ||(A*R)-(H*R)||_F/||A*R||_F = "
+  cout << "## Relative error to samples("
+       << r << ") = ||(A*R)-(H*R)||_F/||A*R||_F = "
        << H_norm_check.normF() / A_norm_est.normF() << endl;
   A_norm_est.clear();
 #endif
