@@ -56,6 +56,7 @@ public:
 
   void operator()(const vector<size_t>& I,
                   const vector<size_t>& J, DistM_t& B) {
+    if (!B.active()) return;
     for (size_t j=0; j<J.size(); j++)
       for (size_t i=0; i<I.size(); i++) {
         if (B.is_local(i,j)) {
