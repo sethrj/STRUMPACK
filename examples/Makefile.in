@@ -1,4 +1,6 @@
-all: sexample dexample cexample zexample testPoisson2d testPoisson3d	\
+all: testPoisson3d	\
+
+alls: sexample dexample cexample zexample testPoisson2d testPoisson3d	\
 	testPoisson2dMPI testPoisson2dMPIDist testMMdouble		\
 	testMMdoubleMPI testMMdoubleMPIDist testMMdouble64		\
 	testMMdoubleMPIDist64 testMMfloat testMMfloatMPIDist		\
