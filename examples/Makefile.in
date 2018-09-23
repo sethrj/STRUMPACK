@@ -1,12 +1,9 @@
 all: @C_EXAMPLES@	\
-	testPoisson2d testPoisson3d	\
-	testMMdouble testMMdouble64 testMMfloat	\
-	@MPI_EXAMPLES@	\
-	mtx2bin bin2mtx MLkernel
+	@MPI_EXAMPLES@
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@
-CPPFLAGS=-I@CMAKE_INSTALL_PREFIX@/include \
+CPPFLAGS=-I@HMATRIX_INCLUDES@/SRC_DOUBLE -I@HMATRIX_INCLUDES@/SRC_DOUBLECOMPLEX -I@CMAKE_INSTALL_PREFIX@/include \
 	-I@METIS_INCLUDES@ -I@PARMETIS_INCLUDES@ -I@SCOTCH_INCLUDES@ \
 	-I@COMBBLAS_INCLUDES@
 
@@ -70,6 +67,7 @@ testMMdouble64: testMMdouble64.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o testMMdouble64.o
 	$(CXX) $(LDFLAGS) testMMdouble64.o -o $@ $(LIBS)
 	$(RM) testMMdouble64.o
+	
 testMMdoubleMPIDist64: testMMdoubleMPIDist64.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o testMMdoubleMPIDist64.o
 	$(CXX) $(LDFLAGS) testMMdoubleMPIDist64.o -o $@ $(LIBS)
@@ -100,6 +98,26 @@ MLkernel: MLkernel.cpp
 	$(CXX) $(LDFLAGS) MLkernel.o -o $@ $(LIBS)
 	$(RM) MLkernel.o
 
+KernelRegressionMPI: KernelRegressionMPI.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegressionMPI.o
+	$(CXX) $(LDFLAGS) KernelRegressionMPI.o -o $@ $(LIBS)
+	$(RM) KernelRegressionMPI.o	
+
+DenseBEMAirbus_HODLR: DenseBEMAirbus_HODLR.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o DenseBEMAirbus_HODLR.o
+	$(CXX) $(LDFLAGS) DenseBEMAirbus_HODLR.o -o $@ $(LIBS)
+	$(RM) DenseBEMAirbus_HODLR.o	
+
+DenseSchur_HODLR: DenseSchur_HODLR.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o DenseSchur_HODLR.o
+	$(CXX) $(LDFLAGS) DenseSchur_HODLR.o -o $@ $(LIBS)
+	$(RM) DenseSchur_HODLR.o	
+	
+DenseToeplitzQChem_HODLR: DenseToeplitzQChem_HODLR.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o DenseToeplitzQChem_HODLR.o
+	$(CXX) $(LDFLAGS) DenseToeplitzQChem_HODLR.o -o $@ $(LIBS)
+	$(RM) DenseToeplitzQChem_HODLR.o		
+	
 clean:
 	rm -f *~ *o @C_EXAMPLES@ \
 	testPoisson2d testPoisson3d	\
