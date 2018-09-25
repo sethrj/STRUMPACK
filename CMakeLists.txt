@@ -13,7 +13,7 @@ option(STRUMPACK_USE_PAPI "Build with support for PAPI monitoring" OFF)
 option(STRUMPACK_USE_COMBBLAS "Use CombBLAS for weighted matching" OFF)
 option(STRUMPACK_COUNT_FLOPS "Build with flop counters" ON)
 option(STRUMPACK_TASK_TIMERS "Build with timers for internal routines" OFF)
-option(STRUMPACK_BUILD_TESTS "Build the tests" ON)
+option(STRUMPACK_BUILD_TESTS "Build the tests" OFF)
 option(STRUMPACK_DEV_TESTING "Enable extensive testing" OFF)
 option(STRUMPACK_C_INTERFACE "Build the C interface" ON)
 
@@ -269,6 +269,9 @@ else()
   message(STATUS "Building STRUMPACK without Scotch/PTScotch support.")
 endif()
 
+set(LIBS ${LIBS} ${HMATRIX_LIBRARIES})
+
+									  
 message(STATUS "Linking with: " "${LIBS}")
 message(STATUS "Implicit C libs: " "${CMAKE_C_IMPLICIT_LINK_LIBRARIES}")
 message(STATUS "Implicit CXX libs: " "${CMAKE_CXX_IMPLICIT_LINK_LIBRARIES}")
@@ -519,7 +522,8 @@ endif()
 if(STRUMPACK_USE_MPI)
   set(STRUMPACK_C_COMPILER "${MPI_C_COMPILER}")
   set(STRUMPACK_CXX_COMPILER "${MPI_CXX_COMPILER}")
-  set(MPI_EXAMPLES "testPoisson2dMPI testPoisson2dMPIDist testPoisson3dMPIDist testMMdouble testMMdoubleMPI testMMdoubleMPIDist testMMdouble64 testMMdoubleMPIDist64 testMMfloat testMMfloatMPIDist")
+  # set(MPI_EXAMPLES "testPoisson2dMPI testPoisson2dMPIDist testPoisson3dMPIDist testMMdouble testMMdoubleMPI testMMdoubleMPIDist testMMdouble64 testMMdoubleMPIDist64 testMMfloat testMMfloatMPIDist")
+  set(MPI_EXAMPLES "KernelRegressionMPI_HODLR DenseBEMAirbus_HODLR DenseSchur_HODLR ToeplitzQChem_HODLR EMCURV_HODLR")
 else()
   set(STRUMPACK_C_COMPILER "${CMAKE_C_COMPILER}")
   set(STRUMPACK_CXX_COMPILER "${CMAKE_CXX_COMPILER}")
@@ -578,6 +582,17 @@ if(STRUMPACK_USE_MPI)
     ${CMAKE_BINARY_DIR}/examples/testMMdoubleMPIDist64.cpp COPYONLY)
   configure_file(${CMAKE_SOURCE_DIR}/examples/testMMfloatMPIDist.cpp
     ${CMAKE_BINARY_DIR}/examples/testMMfloatMPIDist.cpp COPYONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionMPI_HODLR.cpp
+    ${CMAKE_BINARY_DIR}/examples/KernelRegressionMPI_HODLR.cpp COPYONLY)	
+  configure_file(${CMAKE_SOURCE_DIR}/examples/DenseBEMAirbus_HODLR.cpp
+    ${CMAKE_BINARY_DIR}/examples/DenseBEMAirbus_HODLR.cpp COPYONLY)	  
+  configure_file(${CMAKE_SOURCE_DIR}/examples/DenseSchur_HODLR.cpp
+    ${CMAKE_BINARY_DIR}/examples/DenseSchur_HODLR.cpp COPYONLY)	  
+  configure_file(${CMAKE_SOURCE_DIR}/examples/ToeplitzQChem_HODLR.cpp
+    ${CMAKE_BINARY_DIR}/examples/ToeplitzQChem_HODLR.cpp COPYONLY)	  
+  configure_file(${CMAKE_SOURCE_DIR}/examples/EMCURV_HODLR.cpp
+    ${CMAKE_BINARY_DIR}/examples/EMCURV_HODLR.cpp COPYONLY)	
+	
 endif()
 
 if(STRUMPACK_BUILD_TESTS)
