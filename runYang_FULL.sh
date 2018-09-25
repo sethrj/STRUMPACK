@@ -45,7 +45,6 @@ srun -N 32 -n ${nmpi} -c 2 --cpu_bind=cores ${EXEC} ${N} ${DATADIR}${DATA} \
 # --hss_leaf_size ${LEAF} --hss_rel_tol ${ACC} --hss_compression_algorithm original --hss_d0 128 --hss_max_rank 1024 2>&1 | tee -a full_front3d_90000.out
 
 
-
 # ACC=1e-3
 # LEAF=128
 # nmpi=64

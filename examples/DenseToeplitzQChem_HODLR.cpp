@@ -35,29 +35,28 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#define STRUMPACK_PBLAS_BLOCKSIZE 64
+
 #include "HSS/HSSMatrixMPI.hpp"
 #include "misc/TaskTimer.hpp"
-#include "zC_HODLR_wrapper.h"
+#include "dC_HODLR_wrapper.h"
 
 using namespace std;
 using namespace strumpack;
 using namespace strumpack::HSS;
 
-typedef std::complex<float> scomplex;
-typedef std::complex<double> dcomplex;
-#define myscalar dcomplex
-#define cscalar _Complex double
+// typedef std::complex<double> dcomplex;
+// #define myscalar dcomplex
+// #define cscalar _Complex double
 
 
-// #define myscalar double
-// #define cscalar double
+#define myscalar double
+#define cscalar double
 
 
 // FAST_H_SAMPLING= 0: N^2 sampling followed by HSS factor-solve 
 // FAST_H_SAMPLING= 2: HODLR sampling followed by HSS factor-solve
 // FAST_H_SAMPLING= 3: HODLR sampling followed by HODLR factor-solve
-#define FAST_H_SAMPLING 3
+#define FAST_H_SAMPLING 0
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -100,28 +99,22 @@ inline int l2g(int il, int p, int n,int np,int nb){
 } 
 
 
-// The object storing full matrix and sampling function
+// Toeplitz matrix from Quantum Chemistry.
 class C_QuantZmn {
+private:
+  static constexpr myscalar d = 0.1;
+  static constexpr myscalar d2 = d * d;
+  // TODO diagonal element is different from the description in the TOMS paper
+  static constexpr myscalar diag = M_PI * M_PI / (6.0 * d2);
+
 public:
-
-  DenseMatrix<myscalar>* _Afull=nullptr;		
   int _n = 0;
-  int _nloc = 0;
-
-  C_QuantZmn() = default;
-  
-  C_QuantZmn(int n, DenseMatrix<myscalar>* Afull)
-    : _n(n), _Afull(Afull){
-	// cout<<_n_rand<<_rank_rand<<_MatU.size()<<endl;
-	}  
-  inline void Sample(int m, int n, cscalar* val){ 
-  
-  
-  //add conversion here
-  
-  
-	*val =reinterpret_cast<cscalar(&)>((*_Afull)(m,n));
-  } 	
+  C_QuantZmn(int n) : _n(n) {
+  }
+  inline void Sample(int r, int c, cscalar* val){ 
+    myscalar rc = myscalar(r) - myscalar(c);
+    *val = (r==c) ? diag : pow(-1.0, rc) / (rc*rc * d2);  
+  }     
 };
 
 
@@ -139,7 +132,7 @@ class CompressSetup {
   using DistMW_t = DistributedMatrixWrapper<myscalar>;
 
 public:
-  DenseMatrix<myscalar>* _Aseq=nullptr;	
+  // DenseMatrix<myscalar>* _Aseq=nullptr;	
   vector<double> _data;
   int _n = 0;
   // double _h = 0.;
@@ -164,12 +157,68 @@ public:
   MPI_Fint Fcomm;  // the fortran MPI communicator
   
   
-  CompressSetup() = default;
-  CompressSetup(DenseMatrix<myscalar>* Aseq, int n, HSSOptions<myscalar>& opts, 
-	    int nprow, int npcol, int aca, int cluster_size, int nlevel, int *tree)
-    : _Aseq(Aseq), _n(n), _nprows(nprow), _npcols(npcol),_cluster_size(cluster_size),_nlevel(nlevel),_com_opt(aca) {
-   
+ void times(DenseM_t &R, DistM_t &S, int Rprow) {
+    const auto B = S.MB();
+    const auto Bc = S.lcols();
+	myscalar val;
+    DenseM_t Asub(B, B);
+#pragma omp parallel for firstprivate(Asub) schedule(dynamic)
+    for (int lr = 0; lr < S.lrows(); lr += B) {
+      const size_t Br = std::min(B, S.lrows() - lr);
+      const int Ar = S.rowl2g(lr);
+      for (int k = 0, Ac = Rprow*B; Ac < _n; k += B) {
+        const size_t Bk = std::min(B, _n - Ac);
+        // construct a block of A
+        for (size_t j = 0; j < Bk; j++) {
+          for (size_t i = 0; i < Br; i++) {
+			quant_ptr->Sample(Ar + i,Ac + j,&val);
+            Asub(i, j) = val;
+          }
+        }
+        DenseMW_t Ablock(Br, Bk, Asub, 0, 0);
+        DenseMW_t Sblock(Br, Bc, &S(lr, 0), S.ld());
+        DenseMW_t Rblock(Bk, Bc, &R(k, 0), R.ld());
+        // multiply block of A with a row-block of Rr and add result to Sr
+        gemm(Trans::N, Trans::N, (myscalar)1., Ablock, Rblock, (myscalar)1., Sblock);
+        Ac += S.nprows() * B;
+      }
+    }
+  }
 
+  
+  void densemult(DistM_t &R, DistM_t &Sr) {
+    Sr.zero();
+    int maxlocrows = R.MB() * (R.rows() / R.MB());
+    if (R.rows() % R.MB()) maxlocrows += R.MB();
+    int maxloccols = R.MB() * (R.cols() / R.MB());
+    if (R.cols() % R.MB()) maxloccols += R.MB();
+    DenseM_t tmp(maxlocrows, maxloccols);
+    // each processor broadcasts his/her local part of R to all
+    // processes in the same column of the BLACS grid, one after the
+    // other
+    for (int p=0; p<R.nprows(); p++) {
+      if (p == R.prow()) {
+        strumpack::scalapack::gebs2d
+          (R.ctxt(), 'C', ' ', R.lrows(), R.lcols(), R.data(), R.ld());
+        DenseMW_t Rdense(R.lrows(), R.lcols(), R.data(), R.ld());
+        strumpack::copy(Rdense, tmp, 0, 0);
+      } else {
+        int recvrows = strumpack::scalapack::numroc
+          (R.rows(), R.MB(), p, 0, R.nprows());
+        strumpack::scalapack::gebr2d
+          (R.ctxt(), 'C', ' ', recvrows, R.lcols(),
+           tmp.data(), tmp.ld(), p, R.pcol());
+      }
+      times(tmp, Sr, p);
+    }
+  }  
+    
+  
+  
+  CompressSetup() = default;
+  CompressSetup(int n, HSSOptions<myscalar>& opts, 
+	    int nprow, int npcol, int aca, int cluster_size, int nlevel, int *tree)
+    : _n(n), _nprows(nprow), _npcols(npcol),_cluster_size(cluster_size),_nlevel(nlevel),_com_opt(aca) {
 #if FAST_H_SAMPLING == 2	|| FAST_H_SAMPLING == 3
 	   
     int P = mpi_nprocs();
@@ -186,21 +235,15 @@ public:
 	int _d =1;
 	int nogeo=1;
 	// int Nmin = 500;    // finest leafsize
-
-#if FAST_H_SAMPLING == 2  // set slightly higher accuracy in hodlr than hss if hodlr is used as matvec	
-	double tol = opts.rel_tol()*1e-1; // compression tolerance
-#else
-	double tol = opts.rel_tol(); // compression tolerance
-#endif	
-
+	double tol = 1e-3; // compression tolerance
 	// int com_opt=2;    //compression option 1:SVD 2:RRQR 3:ACA 4:BACA  
 	int sort_opt=0; //0:natural order 1:kd-tree 2:cobble-like ordering 3:gram distance-based cobble-like ordering
 	int checkerr = 0; //1: check compression quality 
 	int batch = 100; //batch size for BACA	
 	int myseg=0;     // local number of unknowns
 	
-	 
-	quant_ptr=new C_QuantZmn(_n, _Aseq);	
+	
+	quant_ptr=new C_QuantZmn(_n);	
 
     _Hperm.resize(_n);   
 	groups = new int[P];
@@ -208,23 +251,22 @@ public:
 	for (int i = 0; i < P; i++)groups[i]=i;
 
 	// create hodlr data structures
-	z_c_hodlr_createptree(&P, groups, &Fcomm, &ptree);
-	z_c_hodlr_createoption(&option);	
-	z_c_hodlr_createstats(&stats);		
+	d_c_hodlr_createptree(&P, groups, &Fcomm, &ptree);
+	d_c_hodlr_createoption(&option);	
+	d_c_hodlr_createstats(&stats);		
 	
 	// set hodlr options
-	z_c_hodlr_set_D_option(&option, "tol_comp", tol);
-	z_c_hodlr_set_I_option(&option, "nogeo", nogeo);
-	z_c_hodlr_set_I_option(&option, "Nmin_leaf", _cluster_size); 
-	z_c_hodlr_set_I_option(&option, "RecLR_leaf", _com_opt); 
-	z_c_hodlr_set_I_option(&option, "xyzsort", sort_opt); 
-	z_c_hodlr_set_I_option(&option, "ErrFillFull", checkerr); 
-	z_c_hodlr_set_I_option(&option, "ErrSol", checkerr); 
-	z_c_hodlr_set_I_option(&option, "BACA_Batch", batch); 
+	d_c_hodlr_set_D_option(&option, "tol_comp", tol);
+	d_c_hodlr_set_I_option(&option, "nogeo", nogeo);
+	d_c_hodlr_set_I_option(&option, "Nmin_leaf", _cluster_size); 
+	d_c_hodlr_set_I_option(&option, "RecLR_leaf", _com_opt); 
+	d_c_hodlr_set_I_option(&option, "xyzsort", sort_opt); 
+	d_c_hodlr_set_I_option(&option, "ErrFillFull", checkerr); 
+	d_c_hodlr_set_I_option(&option, "BACA_Batch", batch); 
 	
 
     // construct hodlr with geometrical points	
-	z_c_hodlr_construct(&_n, &_d, _data.data(), &_nlevel, _tree, _Hperm.data(), &_Hrows, &ho_bf, &option, &stats, &msh, &kerquant, &ptree, &C_FuncZmn, quant_ptr, &Fcomm);		
+	d_c_hodlr_construct(&_n, &_d, _data.data(), &_nlevel, _tree, _Hperm.data(), &_Hrows, &ho_bf, &option, &stats, &msh, &kerquant, &ptree, &C_FuncZmn, quant_ptr, &Fcomm);		
 	
 	
     for (auto& i : _Hperm) i--; // Fortran to C
@@ -250,6 +292,7 @@ public:
 
   void operator()(const vector<size_t> &I, const vector<size_t> &J,
                   DistM_t &B) {
+	myscalar val;
     if (!B.active()) return;
     assert(I.size() == size_t(B.rows()) &&
            J.size() == size_t(B.cols()));
@@ -258,7 +301,8 @@ public:
       for (size_t i = 0; i < I.size(); i++) {
         if (B.rowg2p(i) == B.prow()) {
           assert(B.is_local(i, j));
-          B.global(i, j) = (*_Aseq)(I[i],J[j]);
+		  quant_ptr->Sample(I[i],J[j],&val);
+          B.global(i, j) = val;
         }
       }
     }
@@ -361,17 +405,21 @@ public:
     auto starttime = MPI_Wtime();
     int Ncol = R.cols();
     {
-      DenseM_t S1D(_Hrows, Ncol);
+    DenseM_t S1D(_Hrows, Ncol);
 	DenseM_t R1D = redistribute_2D_to_1D(R);
-	z_c_hodlr_mult("N",(cscalar*)(R1D.data()), (cscalar*)(S1D.data()), &_Hrows, &Ncol, &ho_bf, &option, &stats, &ptree);		
-      redistribute_1D_to_2D(S1D, Sr);
+	d_c_hodlr_mult("N",(cscalar*)(R1D.data()), (cscalar*)(S1D.data()), &_Hrows, &Ncol, &ho_bf, &option, &stats, &ptree);
+	redistribute_1D_to_2D(S1D, Sr);	
 	
-    DenseM_t S1D1(_Hrows, Ncol);
-	DenseM_t R1D1 = redistribute_2D_to_1D(R);
-	z_c_hodlr_mult("C",(cscalar*)(R1D1.data()), (cscalar*)(S1D1.data()), &_Hrows, &Ncol, &ho_bf, &option, &stats, &ptree);
-	redistribute_1D_to_2D(S1D1, Sc);
+	Sc = Sr;
+	
+    // DenseM_t S1D1(_Hrows, Ncol);
+	// DenseM_t R1D1 = redistribute_2D_to_1D(R);
+	// d_c_hodlr_mult("C",(cscalar*)(R1D1.data()), (cscalar*)(S1D1.data()), &_Hrows, &Ncol, &ho_bf, &option, &stats, &ptree);
+	// redistribute_1D_to_2D(S1D1, Sc);		
+	
+      
     }
-
+	
     auto endtime = MPI_Wtime();
     if (!mpi_rank())
       cout << "# Apply time " << (endtime-starttime)
@@ -382,32 +430,6 @@ public:
   }
 
 #else
-
-  void times(DenseM_t &R, DistM_t &S, int Rprow) {
-    const auto B = S.MB();
-    const auto Bc = S.lcols();
-    DenseM_t Asub(B, B);
-#pragma omp parallel for firstprivate(Asub) schedule(dynamic)
-    for (int lr = 0; lr < S.lrows(); lr += B) {
-      const size_t Br = std::min(B, S.lrows() - lr);
-      const int Ar = S.rowl2g(lr);
-      for (int k = 0, Ac = Rprow*B; Ac < _n; k += B) {
-        const size_t Bk = std::min(B, _n - Ac);
-        // construct a block of A
-        for (size_t j = 0; j < Bk; j++) {
-          for (size_t i = 0; i < Br; i++) {
-            Asub(i, j) = (*_Aseq)(Ar + i,Ac + j);
-          }
-        }
-        DenseMW_t Ablock(Br, Bk, Asub, 0, 0);
-        DenseMW_t Sblock(Br, Bc, &S(lr, 0), S.ld());
-        DenseMW_t Rblock(Bk, Bc, &R(k, 0), R.ld());
-        // multiply block of A with a row-block of Rr and add result to Sr
-        gemm(Trans::N, Trans::N, (myscalar)1., Ablock, Rblock, (myscalar)1., Sblock);
-        Ac += S.nprows() * B;
-      }
-    }
-  }
 
   void operator()(DistM_t &R, DistM_t &Sr, DistM_t &Sc) {
     Sr.zero();
@@ -439,126 +461,42 @@ public:
 #endif
 };
 
-void pseudoND(int, int, int, int, int, int, int, int, int *);
-
-template <typename D, typename S> std::complex<D> cast(const std::complex<S> s)
-{
-    return std::complex<D>(s.real(), s.imag());
-}
-
 
 int run(int argc, char *argv[]) {
 
-  
-  int n = stoi(argv[1]);
-  string filename("tmp.dat");
-  filename = string(argv[2]); 
-	const char * file = filename.c_str();  
-  // const char *file = "/project/projectdirs/m2957/liuyangz/my_research/matrix/Hsolver/front_3d_10000";
 
-  HSSOptions<myscalar> hss_opts;
-  hss_opts.set_from_command_line(argc, argv);
-  hss_opts.set_verbose(false);
-  int myid = mpi_rank();
-  int P = mpi_nprocs();
+
+  double tstart, tend;
+  std::string filename, prefix, locfile;
+  std::ifstream fp;
+
+  int n=0; 
+    // Setting command line arguments
+  if (argc > 1) n = stoi(argv[1]);
+  int m = n;
   
-  int prow, pcol;
-  int m=n;
-  /* Initialize the BLACS grid */
+  auto P = mpi_nprocs(MPI_COMM_WORLD);
+  // initialize the BLACS grid
   int npcol = floor(sqrt((float)P));
   int nprow = P / npcol;
-  int ctxt, dummy, myrow, mycol;
-  // scalapack::Cblacs_get(0, 0, &ctxt);
-  // scalapack::Cblacs_gridinit(&ctxt, "C", nprow, npcol);
-  // scalapack::Cblacs_gridinfo(ctxt, &dummy, &dummy, &myrow, &mycol);
-  // int ctxt_all = scalapack::Csys2blacs_handle(MPI_COMM_WORLD);
-  // scalapack::Cblacs_gridinit(&ctxt_all, "R", 1, P);
-	BLACSGrid grid(MPI_COMM_WORLD);
-
-  if (!myid) {
-    cout << "nprow=" << nprow << endl;
-    cout << "npcol=" << npcol << endl;
-    // cout << "ctxt=" << ctxt << endl;
-    cout <<  "P=" << P << endl;
-  }
-
-  /* Generate usermap with a pseudo ND of the processes */
-  auto invusermap = new int[P];
-  pseudoND(0, nprow-1, 0, npcol-1, nprow, npcol, 0, 1, invusermap);
-  auto usermap = new int[nprow*npcol];
-  for (int i=0; i<nprow*npcol; i++)
-    usermap[invusermap[i]] = i;
-
-  if (!myid)
-    cout << "Processor grid for A: " << nprow << "x" << npcol << endl << endl;
-
-  DistributedMatrix<scomplex> Asingle(&grid, n, n);
-  DistributedMatrix<myscalar> Adouble(&grid, n, n);
-
-  // Read matrix from file using MPI I/O.
-  // The file is binary, and the same number of processes
-  // and block sizes nb/nb that were used to generate the file
-  // must be used here.
-
-  double tstart = MPI_Wtime();
-
-  if (!myid)
-    cout << "Reading from file " << file << "..." << endl;
-
-  MPI_File fp;
-  auto allbufsize = new long long[P];
-  long long bufsize = Asingle.lrows() * Asingle.lcols(); //locr*locc;
-  MPI_Allgather(&bufsize, 1, MPI_LONG_LONG, allbufsize, 1,
-                MPI_LONG_LONG, MPI_COMM_WORLD);
-
-  auto disp = new long long[P];
-  disp[0] = 0;
-  for (int i=1; i<P; i++)
-    disp[i] = disp[i-1] + allbufsize[invusermap[i-1]] * 8;
-
-  MPI_File_open(MPI_COMM_WORLD, file, MPI_MODE_RDONLY, MPI_INFO_NULL, &fp);
-  MPI_File_set_view(fp, disp[usermap[myid]], MPI_COMPLEX,
-                    MPI_COMPLEX, "native", MPI_INFO_NULL);
-  MPI_File_read(fp, Asingle.data(), bufsize, MPI_COMPLEX, MPI_STATUS_IGNORE);
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_File_close(&fp);
-
-  delete[] disp;
-  delete[] invusermap;
-  delete[] usermap;
-  delete[] allbufsize;
-
-  double tend = MPI_Wtime();
-  
-
-  if (!myid)
-    cout << "Reading file done in: " << tend-tstart << "s" << endl;
-	
-
-  
-  for(int i=0; i<bufsize; i++){
-	Adouble.data()[i] =Asingle.data()[i]; 
-  }
-  // cout<<Adouble.normF()<<" "<<Asingle.normF()<<endl;
-
-  
-
-  // DenseMatrix<myscalar> Aseq1 = Adouble.gather(); 
-  // DenseMatrix<myscalar> Aseq; 
-  // if (!myid)
-    // Aseq = DenseMatrix<myscalar>(Aseq1); 
-  // else
-    // Aseq = DenseMatrix<myscalar>(m, m);   
-  // MPI_Bcast(Aseq.data(), m*m, mpi_type<myscalar>(), 0, MPI_COMM_WORLD); 
-  
-
-DenseMatrix<myscalar> Aseq = Adouble.all_gather();     
+  int prow, pcol;
   
   
+  HSSOptions<myscalar> hss_opts;
+  hss_opts.set_verbose(false);
+
+  BLACSGrid grid(MPI_COMM_WORLD);
+  DistributedMatrix<myscalar> A;
+
+ 
+  int myid = mpi_rank();
+
+  hss_opts.set_from_command_line(argc, argv);
+
+
   double total_time = 0.;
-
   int ACA = 2;
-  
+  if (argc > 2) ACA = stoi(argv[2]);
   
   TaskTimer::t_begin = GET_TIME_NOW();
   TaskTimer timer(string("compression"), 1);
@@ -582,7 +520,7 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
   HSSMatrixMPI<myscalar>* K = nullptr;
 
   CompressSetup kernel_matrix
-    (&Aseq, n, hss_opts, nprow, npcol, ACA, cluster_size, nlevel, tree);
+    (n, hss_opts, nprow, npcol, ACA, cluster_size, nlevel, tree);
 
   auto f0_compress = strumpack::params::flops.load();
 
@@ -590,7 +528,7 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
 	
 #if FAST_H_SAMPLING == 3	
     // factor hodlr 	
-	z_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);		
+	d_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);		
 	
 #else	
 
@@ -635,7 +573,6 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
   auto f0_factor = strumpack::params::flops.load();
   auto ULV = K->factor();
   const auto ULVmem = ULV.total_memory(MPI_COMM_WORLD);
-
   if (!mpi_rank())
     cout << "# factorization time = " << timer.elapsed() << endl
 	<< "# ULV_memory(K) = " << ULVmem / 1e6 << " MB " << endl;
@@ -647,6 +584,12 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
   if (!mpi_rank())
     cout << "# factorization flops = " << total_flops_factor << endl;
 #endif	
+
+
+
+
+           
+
 	
 	
 	
@@ -675,11 +618,11 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
 	DenseMatrix<myscalar> S1D(kernel_matrix._Hrows, 1);
 	DenseMatrix<myscalar> R1D = kernel_matrix.redistribute_2D_to_1D(wdist);
 	int rhs=1;      
-	z_c_hodlr_solve((cscalar*)(S1D.data()), (cscalar*)(R1D.data()), &kernel_matrix._Hrows, &rhs, &kernel_matrix.ho_bf,&kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);	
+	d_c_hodlr_solve((cscalar*)(S1D.data()), (cscalar*)(R1D.data()), &kernel_matrix._Hrows, &rhs, &kernel_matrix.ho_bf,&kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);	
     kernel_matrix.redistribute_1D_to_2D(S1D, wdist);
   
   
-	z_c_hodlr_mult("N",(cscalar*)(S1D.data()), (cscalar*)(R1D.data()), &kernel_matrix._Hrows, &rhs, &kernel_matrix.ho_bf,&kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);	
+	d_c_hodlr_mult("N",(cscalar*)(S1D.data()), (cscalar*)(R1D.data()), &kernel_matrix._Hrows, &rhs, &kernel_matrix.ho_bf,&kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);	
 	DistributedMatrix<myscalar> Bcheck(&grid, n, 1);
 	Bcheck.scatter(B);
     kernel_matrix.redistribute_1D_to_2D(R1D, Bcheck);  
@@ -704,7 +647,7 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
 
 
 #if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3 	 
-	z_c_hodlr_printstats(&kernel_matrix.stats, &kernel_matrix.ptree);	
+	d_c_hodlr_printstats(&kernel_matrix.stats, &kernel_matrix.ptree);	
 #endif  
 
   Bcheck.scaled_add(-1., Bdist);
@@ -732,59 +675,60 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
   
 
 	
-	DistributedMatrix<myscalar> Kdense_dist(&grid, n,n);		
-	int lrows,lcols;
-	int r,c;
-	lrows = scalapack::numroc(Kdense_dist.desc()[2], Kdense_dist.desc()[4], Kdense_dist.prow(), Kdense_dist.desc()[6], Kdense_dist.nprows());
-	lcols = scalapack::numroc(Kdense_dist.desc()[3], Kdense_dist.desc()[5], Kdense_dist.pcol(), Kdense_dist.desc()[7], Kdense_dist.npcols());
-	// double tmp=0;
-	for( int myi=1; myi<= lrows; myi++){
-		r =  l2g(myi,Kdense_dist.prow(),n,Kdense_dist.nprows(),Kdense_dist.desc()[4])-1;
-		for( int myj=1; myj<= lcols; myj++){
-			c =  l2g(myj,Kdense_dist.pcol(),n,Kdense_dist.npcols(),Kdense_dist.desc()[5])-1;
-			// if(!mpi_rank())
-				// cout<<c<<endl;		
+	// DistributedMatrix<myscalar> Kdense_dist(&grid, n,n);		
+	// int lrows,lcols;
+	// int r,c;
+	// lrows = scalapack::numroc(Kdense_dist.desc()[2], Kdense_dist.desc()[4], Kdense_dist.prow(), Kdense_dist.desc()[6], Kdense_dist.nprows());
+	// lcols = scalapack::numroc(Kdense_dist.desc()[3], Kdense_dist.desc()[5], Kdense_dist.pcol(), Kdense_dist.desc()[7], Kdense_dist.npcols());
+	// // double tmp=0;
+	// for( int myi=1; myi<= lrows; myi++){
+		// r =  l2g(myi,Kdense_dist.prow(),n,Kdense_dist.nprows(),Kdense_dist.desc()[4])-1;
+		// for( int myj=1; myj<= lcols; myj++){
+			// c =  l2g(myj,Kdense_dist.pcol(),n,Kdense_dist.npcols(),Kdense_dist.desc()[5])-1;
+			// // if(!mpi_rank())
+				// // cout<<c<<endl;		
 				
-			Kdense_dist(myi-1, myj-1) =  Aseq(r,c);
+			// Kdense_dist(myi-1, myj-1) =  Aseq(r,c);
 
-			// tmp += Kdense_dist(myi-1, myj-1);
-		}
-	}	
+			// // tmp += Kdense_dist(myi-1, myj-1);
+		// }
+	// }	
   
     DistributedMatrix<myscalar> sample_v_dist(&grid, n,1);
 	sample_v_dist.scatter(sample_v);
     DistributedMatrix<myscalar> sample_rhs_dist(sample_v_dist);	
-	gemm(Trans::N, Trans::N, (myscalar)1., Kdense_dist, sample_v_dist, (myscalar)0., sample_rhs_dist);
+	// gemm(Trans::N, Trans::N, (myscalar)1., Kdense_dist, sample_v_dist, (myscalar)0., sample_rhs_dist);
+	
 
+    kernel_matrix.densemult(sample_v_dist, sample_rhs_dist);	
 	DistributedMatrix<myscalar> sample_rhs_dist1(sample_rhs_dist);	 //copy exact rhs
-
-
 	
 
 #if FAST_H_SAMPLING == 3  
 	DenseMatrix<myscalar> S1D(kernel_matrix._Hrows, 1);
 	DenseMatrix<myscalar> R1D = kernel_matrix.redistribute_2D_to_1D(sample_rhs_dist);
 	int rhs=1;      
-	z_c_hodlr_solve((cscalar*)(S1D.data()), (cscalar*)(R1D.data()), &kernel_matrix._Hrows, &rhs, &kernel_matrix.ho_bf,&kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);	
+	d_c_hodlr_solve((cscalar*)(S1D.data()), (cscalar*)(R1D.data()), &kernel_matrix._Hrows, &rhs, &kernel_matrix.ho_bf,&kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);	
     kernel_matrix.redistribute_1D_to_2D(S1D, sample_rhs_dist);
 #else
   K->solve(ULV, sample_rhs_dist);
 #endif  
   
   DistributedMatrix<myscalar> sample_v_dist1(sample_rhs_dist);	 //copy solution vector
-   
+  
+  
   sample_rhs_dist.scaled_add(-1., sample_v_dist);
   double err_sol=sample_rhs_dist.normF()/sample_v_dist.normF();
   if (!mpi_rank()){
-  cout << "# ||X_t-H\\(A*X_t)||_F/||X_t||_F = "<<  err_sol<< endl; 
+  cout << "# ||X_true-X||_F/||X_true||_F = "<<  err_sol<< endl; 
   }  
   
-  gemm(Trans::N, Trans::N, (myscalar)1., Kdense_dist, sample_v_dist1, (myscalar)0., sample_rhs_dist);
+  kernel_matrix.densemult(sample_v_dist1, sample_rhs_dist);	  
   sample_rhs_dist.scaled_add(-1., sample_rhs_dist1);
   double err_sol1=sample_rhs_dist.normF()/sample_rhs_dist1.normF();
   if (!mpi_rank()){
-  cout << "# ||B-A*(H\\B)||_F/||B||_F = "<<  err_sol1<< endl; 
-  }  
+  cout << "# ||A*X-B||_F/||B||_F = "<<  err_sol1<< endl; 
+  }   
 			
 		 
 } 
@@ -804,53 +748,3 @@ int main(int argc, char* argv[]) {
   MPI_Finalize();
   return ierr;
 }
-
-void pseudoND(int bx, int ex, int by, int ey, int nx, int ny, int offset, int cut, int *order) {
-  /* Pseudo-ND auxiliary routine for computation of usermap.
-   * Ordering written in order starting at position "offset".
-   * cut: 0 x-wise, 1 y-wise.
-   *
-   * Only works for nx=ny=2k (even).
-   *
-   * E.g, 4x4 grid:
-   *   0 | 2 || 8 | 10
-   *  ---|---||---|---
-   *   1 | 3 || 9 | 11
-   *  =======||=======
-   *   4 | 6 || 12| 14
-   *  ---|---||---|---
-   *   5 | 7 || 13| 15
-   *
-   */
-
-  int sx, sy, hx, hy;
-
-  sx=ex-bx+1;
-  sy=ey-by+1;
-
-  if(sx==2 && sy==2) {
-    /*  0 2
-     *  1 3
-     *  0: (0,0)=(bx,by)=(bx)*ny+(by) in nat ordering
-     *  1: (1,0)=(bx+1,by)...
-     *  2: ...
-     */
-    order[offset]  =(bx)  *ny+(by);
-    order[offset+1]=(bx+1)*ny+(by);
-    order[offset+2]=(bx)  *ny+(by+1);
-    order[offset+3]=(bx+1)*ny+(by+1);
-    return;
-  }
-
-  if(cut==0) {
-    hx=bx+(ex-bx+1)/2-1;
-    pseudoND(bx  ,hx,by,ey,nx,ny,offset           ,1,order);
-    pseudoND(hx+1,ex,by,ey,nx,ny,offset+(hx-bx+1)*sy,1,order);
-  } else {
-    hy=by+(ey-by+1)/2-1;
-    pseudoND(bx,ex,by  ,hy,nx,ny,offset           ,0,order);
-    pseudoND(bx,ex,hy+1,ey,nx,ny,offset+(hy-by+1)*sx,0,order);
-  }
-
-}
-

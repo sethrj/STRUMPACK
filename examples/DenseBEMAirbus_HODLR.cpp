@@ -185,11 +185,13 @@ public:
 	int _d =1;
 	int nogeo=1;
 	// int Nmin = 500;    // finest leafsize
+
 #if FAST_H_SAMPLING == 2  // set slightly higher accuracy in hodlr than hss if hodlr is used as matvec	
 	double tol = opts.rel_tol()*1e-1; // compression tolerance
 #else
 	double tol = opts.rel_tol(); // compression tolerance
 #endif	
+
 	// int com_opt=2;    //compression option 1:SVD 2:RRQR 3:ACA 4:BACA  
 	int sort_opt=0; //0:natural order 1:kd-tree 2:cobble-like ordering 3:gram distance-based cobble-like ordering
 	int checkerr = 0; //1: check compression quality 
@@ -578,7 +580,9 @@ int run(int argc, char *argv[]) {
   double total_time = 0.;
 
   // if (!mpi_rank())
+
     // cout << "# usage: ./KernelRegressionMPI_HODLR file d h kernel(1=Gauss,2=Laplace) "
+
       // "reorder(natural, 2means, kd, pca) lambda nmpi ninc ACA mode(valid, test)"
          // << endl;
   // if (argc > 1)
@@ -817,6 +821,7 @@ int run(int argc, char *argv[]) {
 	sample_v_dist.scatter(sample_v);
     DistributedMatrix<myscalar> sample_rhs_dist(sample_v_dist);	
 	gemm(Trans::N, Trans::N, (myscalar)1., Kdense_dist, sample_v_dist, (myscalar)0., sample_rhs_dist);
+
 	DistributedMatrix<myscalar> sample_rhs_dist1(sample_rhs_dist);	 //copy exact rhs
 
 	
@@ -831,6 +836,7 @@ int run(int argc, char *argv[]) {
   K->solve(ULV, sample_rhs_dist);
 #endif  
   
+
   DistributedMatrix<myscalar> sample_v_dist1(sample_rhs_dist);	 //copy solution vector
   
   sample_rhs_dist.scaled_add(-1., sample_v_dist);
@@ -846,7 +852,7 @@ int run(int argc, char *argv[]) {
   if (!mpi_rank()){
   cout << "# ||B-A*(H\\B)||_F/||B||_F = "<<  err_sol1<< endl; 
   } 
-			
+	
 		 
 } 
 
