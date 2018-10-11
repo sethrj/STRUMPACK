@@ -185,12 +185,20 @@ inline void get_treelevel(HSSPartitionTree &tree, int &level, int level_ind) {
 }
 
 // get leaf node sizes of a tree
-inline void get_leafsizes(HSSPartitionTree &tree, int &leaf_ind, int* leaf_sizes) {
+inline void get_leafsizes(HSSPartitionTree &tree, int &leaf_ind, int* leaf_sizes, int nlevel, int level) {
 	if (!tree.c.empty()) {
-		get_leafsizes(tree.c[0], leaf_ind, leaf_sizes);
-		get_leafsizes(tree.c[1], leaf_ind, leaf_sizes);
+		get_leafsizes(tree.c[0], leaf_ind, leaf_sizes,nlevel,level+1);
+		get_leafsizes(tree.c[1], leaf_ind, leaf_sizes,nlevel,level+1);
 	}else{
-		leaf_sizes[leaf_ind++] = tree.size;
+		if(level==nlevel){
+			leaf_sizes[leaf_ind++] = tree.size;
+		}else{
+			tree.c.resize(2);
+			tree.c[0].size = tree.size;
+			tree.c[1].size = 0;
+			get_leafsizes(tree.c[0], leaf_ind, leaf_sizes,nlevel,level+1);
+			get_leafsizes(tree.c[1], leaf_ind, leaf_sizes,nlevel,level+1);			
+		}
 	}
 } 
 
@@ -1343,7 +1351,7 @@ int run(int argc, char *argv[]) {
 
   int* tree = new int[(int)pow(2,nlevel)]; //user provided array containing size of each leaf node, not used
   int leaf_ind=0;  
-  get_leafsizes(cluster_tree, leaf_ind, tree);
+  get_leafsizes(cluster_tree, leaf_ind, tree,nlevel,0);
   // for (int i=0; i<(int)pow(2,nlevel); ++i)
   // cout  << tree[i]<< endl; 
   

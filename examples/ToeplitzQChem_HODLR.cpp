@@ -56,7 +56,7 @@ using namespace strumpack::HSS;
 // FAST_H_SAMPLING= 0: N^2 sampling followed by HSS factor-solve 
 // FAST_H_SAMPLING= 2: HODLR sampling followed by HSS factor-solve
 // FAST_H_SAMPLING= 3: HODLR sampling followed by HODLR factor-solve
-#define FAST_H_SAMPLING 3
+#define FAST_H_SAMPLING 0
 
 #if defined(_OPENMP)
 #include <omp.h>
