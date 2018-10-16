@@ -216,7 +216,7 @@ public:
     }
   }  
     
-  ~CompressSetup(){
+  void CompressDelete(){
 #if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
 	d_c_hodlr_deletestats(&stats);
 	d_c_hodlr_deleteproctree(&ptree);
@@ -760,6 +760,7 @@ if(n<=100000){
   }  
 } 
 
+  kernel_matrix.CompressDelete();
   return 0;
 }
 

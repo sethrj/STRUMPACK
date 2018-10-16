@@ -9,7 +9,7 @@ cmake .. \
 -DCMAKE_BUILD_TYPE=Debug \
 -DCMAKE_INSTALL_PREFIX=. \
 -DCMAKE_CXX_COMPILER=mpiicpc \
--DCMAKE_CXX_FLAGS="-I/home/administrator/Desktop/research/STRUMPACK_H_RBF/hod-lr-bf/SRC_DOUBLE" \
+-DCMAKE_CXX_FLAGS="-std=c++11" \
 -DMPI_CXX_COMPILER=/opt/intel/compilers_and_libraries_2018.1.163/linux/mpi/intel64/bin/mpiicpc \
 -DCMAKE_C_COMPILER=mpiicc \
 -DMPI_C_COMPILER=/opt/intel/compilers_and_libraries_2018.1.163/linux/mpi/intel64/bin/mpiicc \
@@ -18,11 +18,11 @@ cmake .. \
 -DMPI_Fortran_COMPILER=/opt/intel/compilers_and_libraries_2018.1.163/linux/mpi/intel64/bin/mpiifort \
 -DMETIS_INCLUDES=$PARMETIS_INSTALL/metis/include \
 -DMETIS_LIBRARIES=$PARMETIS_INSTALL/build/Linux-x86_64/libmetis/libmetis.a \
--DHMATRIX_LIBRARIES="/home/administrator/Desktop/research/STRUMPACK_H_RBF/h_matrix_rbf_randomization/build/SRC/libhmatrix.a;/home/administrator/Desktop/research/STRUMPACK_H_RBF/hod-lr-bf/build/SRC_DOUBLE/libdhodlrbf.a" \
--DSCALAPACK_LIBRARIES="/opt/intel/compilers_and_libraries_2018.1.163/linux/mkl/lib/intel64/libmkl_blacs_intelmpi_lp64.a;/opt/intel/compilers_and_libraries_2018.1.163/linux/mkl/lib/intel64/libmkl_scalapack_lp64.a"
-
+-DSCALAPACK_LIBRARIES="/opt/intel/compilers_and_libraries_2018.1.163/linux/mkl/lib/intel64/libmkl_blacs_intelmpi_lp64.a;/opt/intel/compilers_and_libraries_2018.1.163/linux/mkl/lib/intel64/libmkl_scalapack_lp64.a" \
+-DHMATRIX_INCLUDES="/home/administrator/Desktop/research/STRUMPACK_H_RBF/hod-lr-bf" \
+-DHMATRIX_LIBRARIES="/home/administrator/Desktop/research/STRUMPACK_H_RBF/h_matrix_rbf_randomization/build/SRC/libhmatrix.a;/home/administrator/Desktop/research/STRUMPACK_H_RBF/hod-lr-bf/build/SRC_DOUBLE/libdhodlrbf.a;/home/administrator/Desktop/research/STRUMPACK_H_RBF/hod-lr-bf/build/SRC_DOUBLECOMPLEX/libzhodlrbf.a" \
+-DSTRUMPACK_C_INTERFACE=OFF \
+-DSTRUMPACK_TASK_TIMERS=ON
 make install VERBOSE=1
 cd examples
 make
-
-

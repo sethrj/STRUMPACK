@@ -164,7 +164,7 @@ public:
   MPI_Fint Fcomm;  // the fortran MPI communicator
   
 
-  ~CompressSetup(){
+  void CompressDelete(){
 #if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
 	z_c_hodlr_deletestats(&stats);
 	z_c_hodlr_deleteproctree(&ptree);
@@ -803,6 +803,7 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
 			
 		 
 }
+	kernel_matrix.CompressDelete();
 
   return 0;
 }

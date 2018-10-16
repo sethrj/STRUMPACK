@@ -162,7 +162,7 @@ public:
   F2Cptr ptree;      //process tree returned by Fortran code
   MPI_Fint Fcomm;  // the fortran MPI communicator
   
-  ~CompressSetup(){
+  void CompressDelete(){
 #if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
 	z_c_hodlr_deletestats(&stats);
 	z_c_hodlr_deleteproctree(&ptree);
@@ -665,7 +665,7 @@ int run(int argc, char *argv[]) {
 	
 #if FAST_H_SAMPLING == 3	
     // factor hodlr 	
-	z_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree,&kernel_matrix.msh);		
+	z_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree,&kernel_matrix.msh);	
 	
 #else	
 
@@ -869,7 +869,7 @@ int run(int argc, char *argv[]) {
 	
 		 
 }
-
+  kernel_matrix.CompressDelete();
   return 0;
 }
 

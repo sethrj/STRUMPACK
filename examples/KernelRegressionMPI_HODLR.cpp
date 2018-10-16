@@ -886,7 +886,7 @@ public:
   F2Cptr ptree;      //process tree returned by Fortran code
   MPI_Fint Fcomm;  // the fortran MPI communicator
   
-  ~CompressSetup(){
+  void CompressDelete(){
 #if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
 	d_c_hodlr_deletestats(&stats);
 	d_c_hodlr_deleteproctree(&ptree);
@@ -1640,7 +1640,9 @@ int run(int argc, char *argv[]) {
   if (!mpi_rank())
     cout << "# prediction score: " << ((m - incorrect_quant) / m) * 100 << "%"
          << endl << endl;
-		 
+	
+	kernel_matrix.CompressDelete();
+	
   // scalapack::Cblacs_exit(1);
   // MPI_Finalize();
   return 0;
