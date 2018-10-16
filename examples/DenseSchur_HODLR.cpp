@@ -163,6 +163,21 @@ public:
   F2Cptr ptree;      //process tree returned by Fortran code
   MPI_Fint Fcomm;  // the fortran MPI communicator
   
+
+  ~CompressSetup(){
+#if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
+	z_c_hodlr_deletestats(&stats);
+	z_c_hodlr_deleteproctree(&ptree);
+	z_c_hodlr_deletemesh(&msh);
+	z_c_hodlr_deletekernelquant(&kerquant);
+	z_c_hodlr_deletehobf(&ho_bf);
+	z_c_hodlr_deleteoption(&option);	
+#endif	
+	_data.resize(0);
+	_Hperm.resize(0);
+	_iHperm.resize(0);
+	_dist.resize(0);
+  }  
   
   CompressSetup() = default;
   CompressSetup(DenseMatrix<myscalar>* Aseq, int n, HSSOptions<myscalar>& opts, 
@@ -590,7 +605,7 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
 	
 #if FAST_H_SAMPLING == 3	
     // factor hodlr 	
-	z_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);		
+	z_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree,&kernel_matrix.msh);		
 	
 #else	
 
@@ -787,7 +802,7 @@ DenseMatrix<myscalar> Aseq = Adouble.all_gather();
   }  
 			
 		 
-} 
+}
 
   return 0;
 }

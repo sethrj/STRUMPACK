@@ -886,6 +886,21 @@ public:
   F2Cptr ptree;      //process tree returned by Fortran code
   MPI_Fint Fcomm;  // the fortran MPI communicator
   
+  ~CompressSetup(){
+#if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
+	d_c_hodlr_deletestats(&stats);
+	d_c_hodlr_deleteproctree(&ptree);
+	d_c_hodlr_deletemesh(&msh);
+	d_c_hodlr_deletekernelquant(&kerquant);
+	d_c_hodlr_deletehobf(&ho_bf);
+	d_c_hodlr_deleteoption(&option);	
+#endif	
+	_data.resize(0);
+	_Hperm.resize(0);
+	_iHperm.resize(0);
+	_dist.resize(0);
+  }
+  
   
   CompressSetup() = default;
   CompressSetup(vector<double> data, int d, double h, double l,
@@ -1375,7 +1390,7 @@ int run(int argc, char *argv[]) {
 	
 #if FAST_H_SAMPLING == 3	
     // factor hodlr 	
-	d_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);		
+	d_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree,&kernel_matrix.msh);		
 	
 #else	
 
@@ -1625,7 +1640,7 @@ int run(int argc, char *argv[]) {
   if (!mpi_rank())
     cout << "# prediction score: " << ((m - incorrect_quant) / m) * 100 << "%"
          << endl << endl;
-
+		 
   // scalapack::Cblacs_exit(1);
   // MPI_Finalize();
   return 0;
