@@ -161,7 +161,8 @@ public:
   F2Cptr kerquant;   //kernel quantities structure returned by Fortran code
   F2Cptr ptree;      //process tree returned by Fortran code
   MPI_Fint Fcomm;  // the fortran MPI communicator
-  
+  bool hermitian_ = false;
+	
   void CompressDelete(){
 #if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
 	z_c_hodlr_deletestats(&stats);
@@ -397,9 +398,10 @@ public:
 
 #else
 
-  void times(DenseM_t &R, DistM_t &S, int Rprow) {
+  void times(Trans opA, DenseM_t &R, DistM_t &S, int Rprow) {
     const auto B = S.MB();
     const auto Bc = S.lcols();
+    cscalar val;
     DenseM_t Asub(B, B);
 #pragma omp parallel for firstprivate(Asub) schedule(dynamic)
     for (int lr = 0; lr < S.lrows(); lr += B) {
@@ -408,10 +410,32 @@ public:
       for (int k = 0, Ac = Rprow*B; Ac < _n; k += B) {
         const size_t Bk = std::min(B, _n - Ac);
         // construct a block of A
-        for (size_t j = 0; j < Bk; j++) {
-          for (size_t i = 0; i < Br; i++) {
-            Asub(i, j) = (*_Aseq)(Ar + i,Ac + j);
-          }
+        switch (opA) {
+        case Trans::N:
+          for (size_t j = 0; j < Bk; j++) {
+            for (size_t i = 0; i < Br; i++) {
+              int m = Ar + i, n = Ac + j;
+			  val = (*_Aseq)(m,n);
+              Asub(i, j) = (myscalar)val;
+            }
+          } break;
+        case Trans::T:
+          for (size_t j = 0; j < Bk; j++) {
+            for (size_t i = 0; i < Br; i++) {
+              int m = Ar + i, n = Ac + j;
+			  
+              val = (*_Aseq)(n,m);
+              Asub(i, j) = (myscalar)val;
+            }
+          } break;
+        case Trans::C:
+          for (size_t j = 0; j < Bk; j++) {
+            for (size_t i = 0; i < Br; i++) {
+              int m = Ar + i, n = Ac + j;
+			  val = (*_Aseq)(n,m);
+              Asub(i, j) = blas::my_conj((myscalar)val);
+            }
+          } break;
         }
         DenseMW_t Ablock(Br, Bk, Asub, 0, 0);
         DenseMW_t Sblock(Br, Bc, &S(lr, 0), S.ld());
@@ -422,9 +446,11 @@ public:
       }
     }
   }
+  
 
   void operator()(DistM_t &R, DistM_t &Sr, DistM_t &Sc) {
     Sr.zero();
+	if (!hermitian_) Sc.zero();
     int maxlocrows = R.MB() * (R.rows() / R.MB());
     if (R.rows() % R.MB()) maxlocrows += R.MB();
     int maxloccols = R.MB() * (R.cols() / R.MB());
@@ -446,9 +472,10 @@ public:
           (R.ctxt(), 'C', ' ', recvrows, R.lcols(),
            tmp.data(), tmp.ld(), p, R.pcol());
       }
-      times(tmp, Sr, p);
+      times(Trans::N, tmp, Sr, p);
+      if (!hermitian_) times(Trans::C, tmp, Sc, p);
     }
-    Sc = Sr;
+    if (hermitian_) Sc = Sr;
   }
 #endif
 };
