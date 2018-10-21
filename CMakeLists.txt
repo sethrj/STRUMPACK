@@ -271,7 +271,6 @@ endif()
 
 set(LIBS ${LIBS} ${HMATRIX_LIBRARIES})
 
-									  
 message(STATUS "Linking with: " "${LIBS}")
 message(STATUS "Implicit C libs: " "${CMAKE_C_IMPLICIT_LINK_LIBRARIES}")
 message(STATUS "Implicit CXX libs: " "${CMAKE_CXX_IMPLICIT_LINK_LIBRARIES}")
@@ -398,6 +397,7 @@ install(FILES
   src/sparse/FrontalMatrixDense.hpp
   src/sparse/FrontalMatrixHSS.hpp
   src/sparse/FrontalMatrixBLR.hpp
+  src/sparse/FrontalMatrixHODLR.hpp
   src/sparse/GMRes.hpp
   src/sparse/GeometricReordering.hpp
   src/sparse/IterativeRefinement.hpp
@@ -430,6 +430,10 @@ install(FILES
   src/BLR/BLROptions.hpp
   DESTINATION include/BLR)
 
+install(FILES
+  src/HODLR/HODLROptions.hpp
+  src/HODLR/HODLRMatrix.hpp
+  DESTINATION include/HODLR)
 
 if(STRUMPACK_USE_MPI)
   install(FILES
@@ -457,6 +461,7 @@ if(STRUMPACK_USE_MPI)
     src/sparse/FrontalMatrixHSSMPI.hpp
     src/sparse/FrontalMatrixMPI.hpp
     src/sparse/FrontalMatrixBLRMPI.hpp
+    src/sparse/FrontalMatrixHODLRMPI.hpp
     src/sparse/GMResMPI.hpp
     src/sparse/GeometricReorderingMPI.hpp
     src/sparse/IterativeRefinementMPI.hpp

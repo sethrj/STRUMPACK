@@ -40,7 +40,6 @@
 #include "MatrixReordering.hpp"
 #include "FrontalMatrixMPI.hpp"
 #include "FrontalMatrixDense.hpp"
-#include "FrontalMatrixBLR.hpp"
 
 namespace strumpack {
 
