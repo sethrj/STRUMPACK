@@ -150,7 +150,7 @@ namespace strumpack {
                         const std::pair<std::size_t,double>& b) {
                        return a.first == b.first; }), w.ids_scores.end());
 
-      // maximum number of samples
+      // maximum number of samples, d <= number of w.ids_scores
       std::size_t d_max = this->leaf() ?
         I.size() + opts.dd() :   // leaf size + some oversampling
         w.c[0].Ir.size() + w.c[1].Ir.size() + opts.dd();
@@ -166,11 +166,63 @@ namespace strumpack {
             return a.second < b.second; });
         w.ids_scores.resize(d);
       }
+
+      // sort again on column indices first, since we want to search in it later
+      std::sort(w.ids_scores.begin(), w.ids_scores.end());
+
+      for (std::size_t z = 1; z < w.ids_scores.size(); z++)
+        if (w.ids_scores[z].first <= w.ids_scores[z - 1].first)
+          std::cout << "column indices are not sorted!" << std::endl;
+
       Scolids.reserve(d);
-      for (std::size_t j=0; j<d; j++)
+      for (std::size_t j = 0; j < d; j++)
         Scolids.push_back(w.ids_scores[j].first);
       w.S = DenseM_t(I.size(), Scolids.size());
-      Aelem(I, Scolids, w.S);
+
+      if (this->leaf())
+      {
+        Aelem(I, Scolids, w.S);
+      }
+      else
+      {
+        std::size_t cur_in_first = 0;
+        std::size_t cur_in_second = 0;
+        std::size_t cur_in_A = 0;
+
+        // looks for column index cur_in_A is in w_child indices
+        // if it is there copies values from w_child.S, otherwise write from Aelem
+        // moves cursor in the first child (index_in_child)
+        auto update_w_S = [&](const WorkCompressANN<scalar_t> &w_child,
+                              size_t index_in_child, size_t row_shift) {
+          while (index_in_child < w_child.ids_scores.size() && w_child.ids_scores[index_in_child].first < Scolids[cur_in_A])
+            index_in_child++;
+          if (index_in_child < w_child.ids_scores.size() && w_child.ids_scores[index_in_child].first == Scolids[cur_in_A])
+          {
+            for (std::size_t j = 0; j < w_child.Jr.size(); j++)
+            {
+              w.S(j + row_shift, cur_in_A) = w_child.S(w_child.Jr[j], index_in_child);
+            }
+          }
+          else
+          {
+            DenseMatrix<float> cur_submatrix(w_child.Ir.size(), 1);
+            std::vector<std::size_t> cur_column;
+            cur_column.push_back(Scolids[cur_in_A]);
+            Aelem(w_child.Ir, cur_column, cur_submatrix);
+            for (std::size_t j = 0; j < w_child.Ir.size(); j++)
+            {
+              w.S(j + row_shift, cur_in_A) = cur_submatrix(j, 0);
+            }
+          }
+          return index_in_child;
+        };
+
+        for (cur_in_A = 0; cur_in_A < Scolids.size(); cur_in_A++)
+        {
+          cur_in_first = update_w_S(w.c[0], cur_in_first, 0);
+          cur_in_second = update_w_S(w.c[1], cur_in_second, w.c[0].Ir.size());
+        }
+      }
     }
 
     template<typename scalar_t> bool
@@ -182,7 +234,7 @@ namespace strumpack {
       DenseM_t wSr(S);
       wSr.ID_row(_U.E(), _U.P(), w.Jr, rtol, atol, opts.max_rank(), depth);
       STRUMPACK_ID_FLOPS(ID_row_flops(wSr, _U.cols()));
-      // exploit symmetrix, set V = U
+      // exploit symmetry, set V = U
       _V.E() = _U.E();
       _V.P() = _U.P();
       w.Jc = w.Jr;
