@@ -56,7 +56,7 @@ using namespace strumpack::HSS;
 // FAST_H_SAMPLING= 0: N^2 sampling followed by HSS factor-solve 
 // FAST_H_SAMPLING= 2: HODLR sampling followed by HSS factor-solve
 // FAST_H_SAMPLING= 3: HODLR sampling followed by HODLR factor-solve
-#define FAST_H_SAMPLING 0
+#define FAST_H_SAMPLING 3
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -145,7 +145,9 @@ public:
   int _cluster_size = 500; // finest leafsize
   int _nlevel = 0; // 0: tree level, nonzero if a tree is provided 
   int* _tree = new int[(int)pow(2,_nlevel)]; //user provided array containing size of each leaf node, not used if _nlevel=0  
-  int _com_opt=2;			 
+  int _com_opt=2;
+  int _batch=32;
+  int _lr_blk_num=1;  
   vector<int> _dist;
   C_QuantZmn* quant_ptr;
   F2Cptr ho_bf;  //HODLR returned by Fortran code 
@@ -155,12 +157,12 @@ public:
   F2Cptr kerquant;   //kernel quantities structure returned by Fortran code
   F2Cptr ptree;      //process tree returned by Fortran code
   MPI_Fint Fcomm;  // the fortran MPI communicator
-  bool hermitian_ = false;
   
-  void times(Trans opA, DenseM_t &R, DistM_t &S, int Rprow) {
+  
+ void times(DenseM_t &R, DistM_t &S, int Rprow) {
     const auto B = S.MB();
     const auto Bc = S.lcols();
-    cscalar val;
+	myscalar val;
     DenseM_t Asub(B, B);
 #pragma omp parallel for firstprivate(Asub) schedule(dynamic)
     for (int lr = 0; lr < S.lrows(); lr += B) {
@@ -169,32 +171,14 @@ public:
       for (int k = 0, Ac = Rprow*B; Ac < _n; k += B) {
         const size_t Bk = std::min(B, _n - Ac);
         // construct a block of A
-        switch (opA) {
-        case Trans::N:
-          for (size_t j = 0; j < Bk; j++) {
-            for (size_t i = 0; i < Br; i++) {
-              int m = Ar + i, n = Ac + j;
-			  C_FuncZmn(&m,&n,&val, (C2Fptr)quant_ptr);
-              Asub(i, j) = (myscalar)val;
-            }
-          } break;
-        case Trans::T:
-          for (size_t j = 0; j < Bk; j++) {
-            for (size_t i = 0; i < Br; i++) {
-              int m = Ar + i, n = Ac + j;
-			  
-              C_FuncZmn(&n,&m,&val, (C2Fptr)quant_ptr);
-              Asub(i, j) = (myscalar)val;
-            }
-          } break;
-        case Trans::C:
-          for (size_t j = 0; j < Bk; j++) {
-            for (size_t i = 0; i < Br; i++) {
-              int m = Ar + i, n = Ac + j;
-              C_FuncZmn(&n,&m,&val, (C2Fptr)quant_ptr);
-              Asub(i, j) = blas::my_conj((myscalar)val);
-            }
-          } break;
+        for (size_t j = 0; j < Bk; j++) {
+          for (size_t i = 0; i < Br; i++) {
+			int m,n;
+			m = Ar + i;
+			n = Ac + j;
+			C_FuncZmn(&m,&n,&val, (C2Fptr)quant_ptr);
+            Asub(i, j) = val;
+          }
         }
         DenseMW_t Ablock(Br, Bk, Asub, 0, 0);
         DenseMW_t Sblock(Br, Bc, &S(lr, 0), S.ld());
@@ -230,29 +214,16 @@ public:
           (R.ctxt(), 'C', ' ', recvrows, R.lcols(),
            tmp.data(), tmp.ld(), p, R.pcol());
       }
-      times(Trans::N, tmp, Sr, p);
+      times(tmp, Sr, p);
     }
   }  
     
-  void CompressDelete(){
-#if FAST_H_SAMPLING == 2 || FAST_H_SAMPLING == 3
-	d_c_hodlr_deletestats(&stats);
-	d_c_hodlr_deleteproctree(&ptree);
-	d_c_hodlr_deletemesh(&msh);
-	d_c_hodlr_deletekernelquant(&kerquant);
-	d_c_hodlr_deletehobf(&ho_bf);
-	d_c_hodlr_deleteoption(&option);	
-#endif	
-	_data.resize(0);
-	_Hperm.resize(0);
-	_iHperm.resize(0);
-	_dist.resize(0);
-  }  
+  
   
   CompressSetup() = default;
   CompressSetup(int n, HSSOptions<myscalar>& opts, 
-	    int nprow, int npcol, int aca, int cluster_size, int nlevel, int *tree)
-    : _n(n), _nprows(nprow), _npcols(npcol),_cluster_size(cluster_size),_nlevel(nlevel),_com_opt(aca) {
+	    int nprow, int npcol, int aca, int cluster_size, int nlevel, int *tree, int blk, int batch)
+    : _n(n), _nprows(nprow), _npcols(npcol),_cluster_size(cluster_size),_nlevel(nlevel),_com_opt(aca),_lr_blk_num(blk),_batch(batch) {
 #if FAST_H_SAMPLING == 2	|| FAST_H_SAMPLING == 3
 	   
     int P = mpi_nprocs();
@@ -277,7 +248,7 @@ public:
 	// int com_opt=2;    //compression option 1:SVD 2:RRQR 3:ACA 4:BACA  
 	int sort_opt=0; //0:natural order 1:kd-tree 2:cobble-like ordering 3:gram distance-based cobble-like ordering
 	int checkerr = 0; //1: check compression quality 
-	int batch = 100; //batch size for BACA	
+	// int batch = 32; //batch size for BACA	
 	int myseg=0;     // local number of unknowns
 	
 	
@@ -300,7 +271,8 @@ public:
 	d_c_hodlr_set_I_option(&option, "RecLR_leaf", _com_opt); 
 	d_c_hodlr_set_I_option(&option, "xyzsort", sort_opt); 
 	d_c_hodlr_set_I_option(&option, "ErrFillFull", checkerr); 
-	d_c_hodlr_set_I_option(&option, "BACA_Batch", batch); 
+	d_c_hodlr_set_I_option(&option, "BACA_Batch", _batch); 
+	d_c_hodlr_set_I_option(&option, "LR_BLK_NUM", _lr_blk_num); 
 	
 
     // construct hodlr with geometrical points	
@@ -474,7 +446,6 @@ public:
 
   void operator()(DistM_t &R, DistM_t &Sr, DistM_t &Sc) {
     Sr.zero();
-	if (!hermitian_) Sc.zero();
     int maxlocrows = R.MB() * (R.rows() / R.MB());
     if (R.rows() % R.MB()) maxlocrows += R.MB();
     int maxloccols = R.MB() * (R.cols() / R.MB());
@@ -496,10 +467,9 @@ public:
           (R.ctxt(), 'C', ' ', recvrows, R.lcols(),
            tmp.data(), tmp.ld(), p, R.pcol());
       }
-	  times(Trans::N, tmp, Sr, p);
-      if (!hermitian_) times(Trans::C, tmp, Sc, p);
+      times(tmp, Sr, p);
     }
-    if (hermitian_) Sc = Sr;
+    Sc = Sr;
   }
 #endif
 };
@@ -553,6 +523,11 @@ int run(int argc, char *argv[]) {
   int nlevel=0;
   int* tree = new int[(int)pow(2,nlevel)]; //use natural order
   tree[0] = n;
+  
+  int nbum =1;
+  if (argc > 2) nbum = stoi(argv[3]);
+  int batch=32;
+  if (argc > 3) batch = stoi(argv[4]);
 
 
   
@@ -563,7 +538,7 @@ int run(int argc, char *argv[]) {
   HSSMatrixMPI<myscalar>* K = nullptr;
 
   CompressSetup kernel_matrix
-    (n, hss_opts, nprow, npcol, ACA, cluster_size, nlevel, tree);
+    (n, hss_opts, nprow, npcol, ACA, cluster_size, nlevel, tree,nbum,batch);
 
   auto f0_compress = strumpack::params::flops.load();
 
@@ -571,7 +546,7 @@ int run(int argc, char *argv[]) {
 	
 #if FAST_H_SAMPLING == 3	
     // factor hodlr 	
-	d_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree,&kernel_matrix.msh);		
+	d_c_hodlr_factor(&kernel_matrix.ho_bf, &kernel_matrix.option, &kernel_matrix.stats, &kernel_matrix.ptree);		
 	
 #else	
 
@@ -780,7 +755,6 @@ if(n<=100000){
   }  
 } 
 
-  kernel_matrix.CompressDelete();
   return 0;
 }
 
