@@ -13,6 +13,7 @@ option(TPL_ENABLE_SCOTCH "Build with support for Scotch/PTScotch" OFF)
 option(TPL_ENABLE_PAPI "Build with support for PAPI monitoring" OFF)
 option(TPL_ENABLE_COMBBLAS "Use CombBLAS for weighted matching" OFF)
 option(TPL_ENABLE_HODLRBF "Use HOD-LR-BF code by Yang Liu" OFF)
+option(TPL_ENABLE_SLATE "Use SLATE, the ECP ScaLAPACK replacement" OFF)
 
 option(STRUMPACK_COUNT_FLOPS "Build with flop counters" ON)
 option(STRUMPACK_TASK_TIMERS "Build with timers for internal routines" OFF)
@@ -275,6 +276,23 @@ else()
   message(STATUS "Building STRUMPACK without PAPI support.")
 endif()
 
+if(TPL_ENABLE_SLATE)
+  message(STATUS "Enabling SLATE")
+  option(STRUMPACK_USE_SLATE "" ON)
+  if(DEFINED TPL_SLATE_LIBRARIES)
+    set(LIBS ${LIBS} ${TPL_SLATE_LIBRARIES})
+    include_directories(${TPL_SLATE_INCLUDE_DIRS})
+    if(STRUMPACK_USE_MPI)
+      add_definitions(-DSLATE_WITH_MPI)
+      message(STATUS "compile definitions" "${COMPILE_DEFINITIONS}")
+    endif()
+  else()
+    message(WARNING "Could not find SLATE,"
+      " please define TPL_SLATE_LIBRARIES and TPL_SLATE_INCLUDE_DIRS")
+  endif()
+endif()
+
+
 if(STRUMPACK_USE_MPI)
   if(TPL_ENABLE_COMBBLAS)
     option(STRUMPACK_USE_COMBBLAS "" ON)
@@ -303,7 +321,7 @@ find_package(Metis)
 set(LIBS ${LIBS} ${METIS_LIBRARIES})
 include_directories(${METIS_INCLUDES})
 if(METIS_FOUND)
-  message(STATUS "Found Metis library\n")
+  message(STATUS "Found Metis library")
 else()
   message(FATAL_ERROR
     "Could not find Metis (required)!"
@@ -348,6 +366,11 @@ get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   PROPERTY INCLUDE_DIRECTORIES)
 foreach(dir ${dirs})
   set(STRUMPACK_ALL_INCLUDE_DIRS "${STRUMPACK_ALL_INCLUDE_DIRS} -I${dir}")
+endforeach()
+
+get_directory_property(defs DIRECTORY ${CMAKE_SOURCE_DIR} COMPILE_DEFINITIONS)
+foreach(d ${defs})
+  set(STRUMPACK_COMPILE_DEFS "${STRUMPACK_COMPILE_DEFS} -D${d}")
 endforeach()
 
 

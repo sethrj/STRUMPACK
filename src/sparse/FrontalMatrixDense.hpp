@@ -35,6 +35,10 @@
 #include <cmath>
 #include <random>
 
+#if defined(STRUMPACK_USE_SLATE)
+#include <slate.hh>
+#endif
+
 #include "misc/TaskTimer.hpp"
 #include "dense/BLASLAPACKWrapper.hpp"
 #include "CompressedSparseMatrix.hpp"
@@ -94,7 +98,13 @@ namespace strumpack {
 
   private:
     DenseM_t F11_, F12_, F21_, F22_;
-    std::vector<int> piv; // regular int because it is passed to BLAS
+    std::vector<int> piv_; // regular int because it is passed to BLAS
+#if defined(STRUMPACK_USE_SLATE)
+    slate::Matrix<scalar_t> slateF11_, slateF12_, slateF21_, slateF22_;
+    slate::Pivots slate_piv_;
+    std::map<slate::Option, slate::Value> slate_opts_;
+    int slateMB_ = 1000000; //??
+#endif
 
     FrontalMatrixDense(const FrontalMatrixDense&) = delete;
     FrontalMatrixDense& operator=(FrontalMatrixDense const&) = delete;
@@ -235,6 +245,20 @@ namespace strumpack {
     if (rchild_)
       rchild_->extend_add_to_dense
         (F11_, F12_, F21_, F22_, this, task_depth);
+#if defined(STRUMPACK_USE_SLATE)
+    slateF11_ = slate::Matrix<scalar_t>::fromLAPACK
+      (F11_.rows(), F11_.cols(), F11_.data(), F11_.ld(),
+       slateMB_, 1, 1, MPI_COMM_SELF);
+    slateF12_ = slate::Matrix<scalar_t>::fromLAPACK
+      (F12_.rows(), F12_.cols(), F12_.data(), F12_.ld(),
+       slateMB_,  1, 1, MPI_COMM_SELF);
+    slateF21_ = slate::Matrix<scalar_t>::fromLAPACK
+      (F21_.rows(), F21_.cols(), F21_.data(), F21_.ld(),
+       slateMB_, 1, 1, MPI_COMM_SELF);
+    slateF22_ = slate::Matrix<scalar_t>::fromLAPACK
+      (F22_.rows(), F22_.cols(), F22_.data(), F22_.ld(),
+       slateMB_, 1, 1, MPI_COMM_SELF);
+#endif
   }
 
   template<typename scalar_t,typename integer_t> void
@@ -242,7 +266,10 @@ namespace strumpack {
   (const SpMat_t& A, const SPOptions<scalar_t>& opts,
    int etree_level, int task_depth) {
     if (dim_sep()) {
-      piv = F11_.LU(task_depth);
+#if defined(STRUMPACK_USE_SLATE)
+      slate::getrf(slateF11_, slate_piv_, slate_opts_);
+#else
+      piv_ = F11_.LU(task_depth);
       if (opts.replace_tiny_pivots()) {
         // TODO consider other values for thresh
         //  - sqrt(eps)*|A|_1 as in SuperLU ?
@@ -251,14 +278,21 @@ namespace strumpack {
           if (std::abs(F11_(i,i)) < thresh)
             F11_(i,i) = (std::real(F11_(i,i)) < 0) ? -thresh : thresh;
       }
+#endif
       if (dim_upd()) {
-        F12_.laswp(piv, true);
+#if defined(STRUMPACK_USE_SLATE)
+        slate::getrs(slateF11_, slate_piv_, slateF12_, slate_opts_);
+        slate::gemm(scalar_t(-1.), slateF21_, slateF12_,
+                    scalar_t(1.), slateF22_, slate_opts_);
+#else
+        F12_.laswp(piv_, true);
         trsm(Side::L, UpLo::L, Trans::N, Diag::U,
              scalar_t(1.), F11_, F12_, task_depth);
         trsm(Side::R, UpLo::U, Trans::N, Diag::N,
              scalar_t(1.), F11_, F21_, task_depth);
         gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,
              scalar_t(1.), F22_, task_depth);
+#endif
       }
     }
     STRUMPACK_FULL_RANK_FLOPS
@@ -289,9 +323,26 @@ namespace strumpack {
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDense<scalar_t,integer_t>::fwd_solve_phase2
   (DenseM_t& b, DenseM_t& bupd, int etree_level, int task_depth) const {
+#if defined(STRUMPACK_USE_SLATE)
+    if (dim_sep()) {
+      auto sbloc = slate::Matrix<scalar_t>::fromLAPACK
+        (dim_sep(), b.cols(), b.ptr(this->sep_begin(), 0), b.ld(),
+         slateMB_, 1, 1, MPI_COMM_SELF);
+      slate::getrs(const_cast<slate::Matrix<scalar_t>&>(slateF11_),
+                   const_cast<slate::Pivots&>(slate_piv_), sbloc, slate_opts_);
+      if (dim_upd()) {
+        auto sbupd = slate::Matrix<scalar_t>::fromLAPACK
+          (bupd.rows(), bupd.cols(), bupd.data(), bupd.ld(),
+           slateMB_, 1, 1, MPI_COMM_SELF);
+        slate::gemm
+          (scalar_t(-1.), const_cast<slate::Matrix<scalar_t>&>(slateF21_),
+           sbloc, scalar_t(1.), sbupd, slate_opts_);
+      }
+    }
+#else
     if (dim_sep()) {
       DenseMW_t bloc(dim_sep(), b.cols(), b, this->sep_begin_, 0);
-      bloc.laswp(piv, true);
+      //bloc.laswp(piv_, true);
       if (b.cols() == 1) {
         trsv(UpLo::L, Trans::N, Diag::U, F11_, bloc, task_depth);
         if (dim_upd())
@@ -305,6 +356,7 @@ namespace strumpack {
                scalar_t(1.), bupd, task_depth);
       }
     }
+#endif
   }
 
   template<typename scalar_t,typename integer_t> void
@@ -328,6 +380,19 @@ namespace strumpack {
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDense<scalar_t,integer_t>::bwd_solve_phase1
   (DenseM_t& y, DenseM_t& yupd, int etree_level, int task_depth) const {
+#if defined(STRUMPACK_USE_SLATE)
+    if (dim_sep() && dim_upd()) {
+      auto syloc = slate::Matrix<scalar_t>::fromLAPACK
+        (dim_sep(), y.cols(), y.ptr(this->sep_begin(), 0), y.ld(),
+         slateMB_, 1, 1, MPI_COMM_SELF);
+      auto syupd = slate::Matrix<scalar_t>::fromLAPACK
+        (yupd.rows(), yupd.cols(), yupd.data(), yupd.ld(),
+         slateMB_, 1, 1, MPI_COMM_SELF);
+      slate::gemm
+        (scalar_t(-1.), const_cast<slate::Matrix<scalar_t>&>(slateF12_),
+         syupd, scalar_t(1.), syloc, slate_opts_);
+    }
+#else
     if (dim_sep()) {
       DenseMW_t yloc(dim_sep(), y.cols(), y, this->sep_begin_, 0);
       if (y.cols() == 1) {
@@ -343,6 +408,7 @@ namespace strumpack {
              F11_, yloc, task_depth);
       }
     }
+#endif
   }
 
   template<typename scalar_t,typename integer_t> void
