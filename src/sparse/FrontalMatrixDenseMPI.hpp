@@ -34,7 +34,7 @@
 #include <algorithm>
 #include <cmath>
 
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
 #include <slate.hh>
 #endif
 
@@ -102,7 +102,7 @@ namespace strumpack {
   private:
     DistM_t F11_, F12_, F21_, F22_;
     std::vector<int> piv;
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
     slate::Matrix<scalar_t> slateF11_, slateF12_, slateF21_, slateF22_;
     slate::Pivots slate_piv_;
     std::map<slate::Option, slate::Value> slate_opts_;
@@ -181,7 +181,7 @@ namespace strumpack {
       F22_.zero();
     }
     extend_add();
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
     if (dsep) {
       slateF11_ = slate::Matrix<scalar_t>::fromScaLAPACK
         (F11_.rows(), F11_.cols(), F11_.data(), F11_.ld(),
@@ -205,7 +205,7 @@ namespace strumpack {
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDenseMPI<scalar_t,integer_t>::partial_factorization() {
     if (this->dim_sep() && grid()->active()) {
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
       std::map<slate::Option, slate::Value> slate_opts;
       slate::getrf(slateF11_, slate_piv_, slate_opts);
 #else
@@ -213,7 +213,7 @@ namespace strumpack {
 #endif
       STRUMPACK_FULL_RANK_FLOPS(LU_flops(F11_));
       if (this->dim_upd()) {
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
         // F12_.laswp(piv, true);
 
         // slate::TriangularMatrix<scalar_t> F11_L
@@ -270,7 +270,7 @@ namespace strumpack {
     bupd = DistM_t(grid(), this->dim_upd(), b.cols());
     bupd.zero();
     this->extend_add_b(b, bupd, CBl, CBr, seqCBl, seqCBr);
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
     if (this->dim_sep()) {
       auto sbloc = slate::Matrix<scalar_t>::fromScaLAPACK
         (b.rows(), b.cols(), b.data(), b.ld(),
@@ -309,7 +309,7 @@ namespace strumpack {
   (DenseM_t& yloc, DistM_t* ydist, DistM_t& yupd, DenseM_t& seqyupd,
    int etree_level) const {
     DistM_t& y = ydist[this->sep_];
-#if defined(STRUMPACK_USE_SLATE)
+#if defined(STRUMPACK_USE_SLATE_SCALAPACK)
     if (this->dim_sep() && this->dim_upd()) {
       auto sy = slate::Matrix<scalar_t>::fromScaLAPACK
         (y.rows(), y.cols(), y.data(), y.ld(), y.MB(),
