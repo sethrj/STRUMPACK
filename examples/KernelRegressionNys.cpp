@@ -41,7 +41,7 @@ using namespace std;
 using namespace strumpack;
 using namespace strumpack::HSS;
 using namespace strumpack::kernel;
-using scalar_t = float;
+using scalar_t = double;
 
 template<typename scalar_t> vector<scalar_t>
 read_from_file(string filename) {
@@ -58,17 +58,17 @@ read_from_file(string filename) {
   return data;
 }
 
-inline float dist2(float* x, float* y, int d) {
-  float k = 0.;
+inline scalar_t dist2(scalar_t* x, scalar_t* y, int d) {
+  scalar_t k = 0.;
   for (int i=0; i<d; i++) k += pow(x[i] - y[i], 2.);
   return k;
 }
 
-inline float Gauss_kernel(float* x, float* y, int d, float h) {
-  return exp(-dist2(x, y, d)/(2*h*h));
+inline scalar_t Gauss_kernel(scalar_t* x, scalar_t* y, int d, scalar_t h) {
+  return exp(-dist2(x, y, d)/(2.*h*h));
 }
 
-void print_sample(float* x) {
+void print_sample(scalar_t* x) {
   int d = 8;
   for (int i = 0; i < d; ++i)
     cout << x[i] << " ";
@@ -140,9 +140,11 @@ int main(int argc, char *argv[]) {
     std::mt19937 gen(1); // reproducible
     std::generate(Mid.begin(), Mid.end(), [&]() { return dist(gen); });
   #else
-    M = 10;
+    // M = 10;
+    // std::vector<std::size_t> Mid{8148-1, 9058-1, 1270-1, 9132-1, 6322-1, 975-1, 2784-1, 5465-1, 9568-1, 9641-1};
+    M = 100;
+    std::vector<std::size_t> Mid{8148-1,9058-1,1270-1,9132-1,6322-1,975-1,2784-1,5465-1,9568-1,9641-1,1575-1,9696-1,9561-1,4848-1,7992-1,1417-1,4211-1,9142-1,7908-1,9577-1,6545-1,357-1,8473-1,9319-1,6772-1,7559-1,7413-1,3912-1,6537-1,1707-1,7040-1,318-1,2761-1,461-1,969-1,8206-1,6924-1,3160-1,9467-1,344-1,4370-1,3800-1,7624-1,7918-1,1861-1,4876-1,4436-1,6433-1,7060-1,7510-1,2747-1,6763-1,6517-1,1618-1,1184-1,4957-1,9544-1,3385-1,5819-1,2225-1,7468-1,2536-1,5029-1,6947-1,8853-1,9531-1,5437-1,1377-1,1483-1,2558-1,8349-1,2525-1,8085-1,2418-1,9224-1,3474-1,1952-1,2492-1,6113-1,4696-1,3489-1,8241-1,5805-1,5452-1,9095-1,2835-1,7507-1,7472-1,3771-1,5628-1,752-1,535-1,5260-1,7720-1,9253-1,1287-1,5634-1,4649-1,118-1,3338-1};
     cout << "# Nystrom centers  = " << M << std::endl;
-    std::vector<std::size_t> Mid{8148-1, 9058-1, 1270-1, 9132-1, 6322-1, 975-1, 2784-1, 5465-1, 9568-1, 9641-1};
   #endif
 
   // Take a random subset Mid of size Mid.size() from the original dataset
@@ -182,7 +184,7 @@ int main(int argc, char *argv[]) {
     for (std::size_t i=0; i<M; i++)
       Kmm(i, j) = K_Nystrom->eval(i, j);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  // Kmm.print("Kmm",true,10);
+  // Kmm.print("Kmm",false,10);
 
   std::cout << "Forming Knm ..." << std::endl;
   timer.start();
@@ -202,7 +204,9 @@ int main(int argc, char *argv[]) {
   gemm(Trans::T, Trans::N, scalar_t(1.), Knm, Knm,
        scalar_t(n*lambda), Hdense);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  // Hdense.print("Hdense",true,10);
+  // Hdense.print("Hdense",false,10);
+  // cout << "Hdense.norm() = " << Hdense.norm() << endl;
+  // cout << "Hdense(1,0) = " << Hdense(1,0) << endl;
 
   // Compression to HSS
   std::cout << "# H compression to HSS ..." << std::endl;
@@ -236,10 +240,12 @@ int main(int argc, char *argv[]) {
   DenseMatrix<scalar_t> z(M, 1);
   gemm(Trans::T, Trans::N, scalar_t(1.), Knm, y, scalar_t(0.), z);
   // z.print("z",true,10);
-
+  // cout << "z.norm() = " << z.norm() << endl;
   DenseMatrix<scalar_t> weights(z);
   H.solve(ULV, weights);
-  // weights.print("weights",true,10);
+  // weights.print("weights",false,10);
+  // cout << "weights.norm() = " << weights.norm() << endl;
+  // return 0;
   cout << "## Solve took: " << timer.elapsed() << std::endl;
 
   // Prediction
@@ -256,6 +262,8 @@ int main(int argc, char *argv[]) {
   // Matrix vector product to compute predictions
   DenseMatrix<scalar_t> prediction(m, 1);
   gemm(Trans::N, Trans::N, scalar_t(1.), Kr, weights, scalar_t(0.), prediction);
+  // prediction.print("prediction", false, 10);
+  // cout << "prediction.norm() = " << prediction.norm() << endl;
 
   // Quantify threshold
   for (int i = 0; i < m; ++i)
@@ -269,7 +277,7 @@ int main(int argc, char *argv[]) {
   }
 
   scalar_t c_err = 100.0 - (((m - incorrect_quant) / m) * 100);
-  cout << "## Prediction := " << timer.elapsed() << std::endl;
+  cout << "## Prediction took :" << timer.elapsed() << std::endl;
   cout << "## c-err: " << c_err << "%" << std::endl;
   // assert( areSameScalarsToEps(c_err, 22.6) );
 
