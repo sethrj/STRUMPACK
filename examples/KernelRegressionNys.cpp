@@ -68,10 +68,27 @@ inline scalar_t Gauss_kernel(scalar_t* x, scalar_t* y, int d, scalar_t h) {
   return exp(-dist2(x, y, d)/(2.*h*h));
 }
 
-void print_sample(scalar_t* x) {
+void printSample(scalar_t* x) {
   int d = 8;
   for (int i = 0; i < d; ++i)
     cout << x[i] << " ";
+  cout << endl;
+}
+
+void printPermutationVector(std::string NAME, std::vector<int> v) {
+  cout << NAME << ": ";
+  for(auto &i : v)
+    cout << i-1 << " ";
+  cout << endl;
+}
+
+void printMatrixBlock(DenseMatrix<scalar_t> Mat) {
+  for (int i = 0; i < 4; ++i){
+    for (int j = 0; j < 4; ++j){
+      cout << Mat(i,j) << " ";
+    }
+    cout << endl;
+  }
   cout << endl;
 }
 
@@ -161,13 +178,6 @@ int main(int argc, char *argv[]) {
     cout << "# Nystrom centers  = " << M << std::endl;
   #endif
 
-  sort(Mid.begin(), Mid.end());
-  vector<std::size_t>::iterator it = std::unique( Mid.begin(), Mid.end() );
-  bool wasUnique = (it == Mid.end() );
-  cout << "Mid wasUnique = " << wasUnique << endl;
-  assert(wasUnique == 1);
-  // return 0;
-
   // Take a random subset Mid of size Mid.size() from the original dataset
   DenseMatrix<scalar_t> training_Nystrom(d, M);
   for (std::size_t j=0; j<M; j++)
@@ -181,12 +191,17 @@ int main(int argc, char *argv[]) {
   // Kernel object setup for Nystrom (reduced) dataset
   auto K_Nystrom = create_kernel<scalar_t>(ktype, training_Nystrom, h, l0);
 
+  //here
+  #if 0
   // Clustering
   std::cout << "Clustering ..." << std::endl;
   timer.start();
   std::vector<int> perm;
+  // training_Nystrom.print("bef_training_Nystrom", true, 10);
   auto t = binary_tree_clustering(hss_opts.clustering_algorithm(),
-     K_Nystrom->data(), perm, hss_opts.leaf_size());
+     K_Nystrom->data(), perm, hss_opts.leaf_size()); //Permutes training_Nystrom
+  // printPermutationVector("perm", perm);
+  // training_Nystrom.print("aft_training_Nystrom", true, 10);
 
   // Permute columns of matrix training_Nystrom
   // training_Nystrom.lapmt(perm, true);
@@ -196,24 +211,23 @@ int main(int argc, char *argv[]) {
   // for (std::size_t i=0; i<M; i++)
   //   iperm[perm[i]-1] = i+1;
   cout << "## Clustering took: " << timer.elapsed() << std::endl;
+  #endif
 
   std::cout << "Forming Kmm ..." << std::endl;
   timer.start();
   DenseMatrix<scalar_t> Kmm(M, M);
-  #pragma omp parallel for collapse(2)
   for (std::size_t j=0; j<M; j++)
     for (std::size_t i=0; i<M; i++)
-      Kmm(i, j) = K_Nystrom->eval(i, j);
+      Kmm(i, j) = K_Nystrom->eval(i, j); // Nystrom -reduced- kernel object
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  // Kmm.print("Kmm",false,10);
+  // Kmm.print("Kmm",true,10);
 
   std::cout << "Forming Knm ..." << std::endl;
   timer.start();
   DenseMatrix<scalar_t> Knm(n, M);
-  #pragma omp parallel for collapse(2)
   for (std::size_t j=0; j<M; j++)
     for (std::size_t i=0; i<n; i++)
-      Knm(i, j) = K->eval(i, Mid[j]);
+      Knm(i, j) = K->eval(i, Mid[j]); // Full kernel object
       // Knm(i, j) = K->eval(i, Mid[iperm[j]-1]);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
   // Knm.print("Knm",true,10);
@@ -225,9 +239,57 @@ int main(int argc, char *argv[]) {
   gemm(Trans::T, Trans::N, scalar_t(1.), Knm, Knm,
        scalar_t(n*lambda), Hdense);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  // Hdense.print("Hdense",false,10);
+  // Hdense.print("Hdense",true,10);
+  DenseMatrix<scalar_t> Hc(Hdense); // Copy to check compression error
+  // printMatrixBlock(Hdense);
   // cout << "Hdense.norm() = " << Hdense.norm() << endl;
   // cout << "Hdense(1,0) = " << Hdense(1,0) << endl;
+  // vector<scalar_t> eigs = Hdense.singular_values();
+  // cout << "===> eigs[0] = " << eigs[0] << endl;
+
+  // #if 0
+  // // Clustering
+  // std::cout << "Clustering ..." << std::endl;
+  // timer.start();
+  // std::vector<int> perm;
+  // auto t = binary_tree_clustering(hss_opts.clustering_algorithm(),
+  //    K_Nystrom->data(), perm, hss_opts.leaf_size()); // this permutes data
+  // printPermutationVector("perm", perm);
+  // // Permute columns of matrix training_Nystrom
+  // // training_Nystrom.lapmt(perm, true); //permutes columns
+  // // Get inverse permutation
+  // // std::vector<int> iperm;
+  // // iperm.resize(perm.size());
+  // // for (std::size_t i=0; i<M; i++)
+  // //   iperm[perm[i]-1] = i+1;
+  // cout << "## Clustering took: " << timer.elapsed() << std::endl;
+  // #endif
+
+  #if 1
+  // Clustering
+  std::cout << "Clustering ..." << std::endl;
+  timer.start();
+  std::vector<int> perm;
+  auto t = binary_tree_clustering(hss_opts.clustering_algorithm(),
+     K_Nystrom->data(), perm, hss_opts.leaf_size()); // this permutes data
+  // training_Nystrom.lapmt(perm, true); y tho???
+  // Get inverse permutation
+  std::vector<int> iperm;
+  iperm.resize(perm.size());
+  for (std::size_t i=0; i<M; i++)
+    iperm[perm[i]-1] = i+1;
+  // Add one to use LAPACK routines
+  for (int i = 0; i < Mid.size(); ++i){
+    perm[i] = perm[i] + 1;
+    iperm[i] = iperm[i] + 1;
+  }
+  // See permutation vectors
+  if ( Mid.size() <= 64){
+    printPermutationVector(" perm", perm);
+    printPermutationVector("iperm", iperm);
+  }
+  cout << "## Clustering took: " << timer.elapsed() << std::endl;
+  #endif
 
   // Compression to HSS
   std::cout << "# H compression to HSS ..." << std::endl;
@@ -247,6 +309,14 @@ int main(int argc, char *argv[]) {
        << 100. * H.memory() / Hdense.memory() << "% of dense" << std::endl;
   cout << "## Compression took: " << timer.elapsed() << std::endl;
 
+  auto HSSd = H.dense();
+  // Hdense.print("Hdense",true,10);
+  // Hc.print("Hc",true,10);
+  HSSd.scaled_add(-1., Hc);
+  // HSSd.print("HSSd",true,10);
+  cout << "# relative error = ||HSSd-Hd||_F/||Hd||_F = "
+       << HSSd.normF() / Hdense.normF() << endl;
+
   // Factorization and solve
   cout << "# Factorization ..." << std::endl;
   timer.start();
@@ -262,8 +332,17 @@ int main(int argc, char *argv[]) {
   gemm(Trans::T, Trans::N, scalar_t(1.), Knm, y, scalar_t(0.), z);
   // z.print("z",true,10);
   // cout << "z.norm() = " << z.norm() << endl;
+
+  // Need to permute z before?
+
   DenseMatrix<scalar_t> weights(z);
-  H.solve(ULV, weights);
+
+  H.solve(ULV, weights); // Inexact solve not good enough for c-err
+
+  // Need to inverse permute weights?
+  // weights.lapmr(iperm, true); //permutes rows
+  //
+
   // weights.print("weights",false,10);
   // cout << "weights.norm() = " << weights.norm() << endl;
   cout << "## Solve took: " << timer.elapsed() << std::endl;
@@ -298,7 +377,6 @@ int main(int argc, char *argv[]) {
   scalar_t c_err = 100.0 - (((m - incorrect_quant) / m) * 100);
   // cout << "## Prediction took :" << timer.elapsed() << std::endl;
   cout << "## c-err: " << c_err << "%" << std::endl;
-  // assert( areSameScalarsToEps(c_err, 22.6) );
 
   return 0;
 }
