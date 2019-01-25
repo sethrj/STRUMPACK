@@ -60,9 +60,10 @@ namespace strumpack {
    int restart,
    GramSchmidtType GStype,
    bool non_zero_guess,
-   bool verbose)
+   bool verbose,
+   scalar_t hss_rtol
+   )
   {
-    std::cout << "hello from GMRES" << std::endl;
     // using scalar_t = scalar_t;
     // using scalar_t = typename RealType<scalar_t>::value_type;
     // spmv(b, x);
@@ -167,8 +168,11 @@ namespace strumpack {
     }
     DenseMatrix<scalar_t> convergence_DM(
       convergence.size(),1,convergence.data(),convergence.size());
-    convergence_DM.print_to_file("convergence_DM", "convergence_DM.txt", 10);
-    std::cout << "Saved GMRES" << std::endl;
+
+    char FILE_NAME[50];
+    sprintf(FILE_NAME, "conv_%1.2e.txt", hss_rtol);
+    convergence_DM.print_to_file("convergence_DM", FILE_NAME, 10);
+    std::cout << "Saved GMRES convergence in file: "<< FILE_NAME << std::endl;
     return rho;
   }
 

@@ -146,8 +146,9 @@ int main(int argc, char *argv[]) {
   HSSOptions<scalar_t> hss_opts;
   hss_opts.set_verbose(true);
   hss_opts.set_from_command_line(argc, argv);
-  // hss_opts.describe_options();
+  hss_opts.describe_options();
   cout << "# hss_rel_tol      = " << hss_opts.rel_tol() << std::endl;
+  cout << "# hss_abs_tol      = " << hss_opts.abs_tol() << std::endl;
   cout << "# hss_leaf_size    = " << hss_opts.leaf_size() << std::endl ;
   cout << "# hss_d0           = " << hss_opts.d0() << std::endl ;
   cout << "# hss_dd           = " << hss_opts.dd() << std::endl;
@@ -234,15 +235,15 @@ int main(int argc, char *argv[]) {
   gemm(Trans::T, Trans::N, scalar_t(1.), Knm, Knm,
        scalar_t(n*lambda), Hdense);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  DenseMatrix<scalar_t> Hc(Hdense); // Copy to check compression error
-  const DenseMatrix<scalar_t> KMM(Hdense); // Copy for GMRres
+  DenseMatrix<scalar_t> Hc(Hdense);  // Copy to check dense to HSS compression error
+  DenseMatrix<scalar_t> KMM(Hdense); // Copy for GMRres
 
   // Clustering
   std::cout << "Clustering ..." << std::endl;
   timer.start();
   std::vector<int> perm;
   auto t = binary_tree_clustering(hss_opts.clustering_algorithm(),
-     K_Nystrom->data(), perm, hss_opts.leaf_size()); // this permutes data
+     K_Nystrom->data(), perm, hss_opts.leaf_size()); // this permutes data (training_Nystrom)
   // Get inverse permutation
   std::vector<int> iperm;
   iperm.resize(perm.size());
@@ -275,7 +276,7 @@ int main(int argc, char *argv[]) {
 
   auto HSSd = H.dense();
   HSSd.scaled_add(-1., Hc);
-  cout << "# relative error = ||HSSd-Hd||_F/||Hd||_F = "
+  cout << "# Compression relative error = ||HSSd-Hd||_F/||Hd||_F = "
        << HSSd.normF() / Hdense.normF() << endl;
 
   // Factorization and solve
@@ -291,17 +292,19 @@ int main(int argc, char *argv[]) {
   DenseMatrix<scalar_t> y(n, 1, &train_labels[0], n);
   DenseMatrix<scalar_t> z(M, 1);
   gemm(Trans::T, Trans::N, scalar_t(1.), Knm, y, scalar_t(0.), z);
-  DenseMatrix<scalar_t> weights(z); // copy
+  DenseMatrix<scalar_t> z_check(z);   // copy to check relative residual of the solve
+  DenseMatrix<scalar_t> weights(z); // for solve system here
 
   #if 1
-    const DenseMatrix<scalar_t> z_gmres(z); // copy
-    DenseMatrix<scalar_t> weights_gmres(z); // copy
+    const DenseMatrix<scalar_t> z_gmres(z); // copy to pass to GMRES (x)
+    DenseMatrix<scalar_t> weights_gmres(z); // copy to pass to GMRES (b)
+    DenseMatrix<scalar_t>         err_z(z); // copy to check relative error of the solve
 
     // Lambda spmv
     std::function<void(const scalar_t*, scalar_t*)>
     spmv = [&](const scalar_t* x, scalar_t* b) {
-      auto cdmw_x = ConstDenseMatrixWrapperPtr<scalar_t> (M, size_t(1), x, size_t(1));
-      DenseMatrixWrapper<scalar_t> dmw_b(size_t(M), size_t(1), b, size_t(1));
+      auto cdmw_x = ConstDenseMatrixWrapperPtr<scalar_t> (size_t(M), size_t(1), x, size_t(M));
+      DenseMatrixWrapper<scalar_t> dmw_b(size_t(M), size_t(1), b, size_t(M));
       // Operation: b = KMM*x
       gemv(
         Trans::N,
@@ -310,19 +313,20 @@ int main(int argc, char *argv[]) {
         *cdmw_x,         // ConstDenseMatrixWrapperPtr
         scalar_t(0.0),
         dmw_b,           // DenseMatrix
-        1                // OMP task depth
+        0                // OMP task depth
       );
     };
 
     // Lambda for precondioner
-    auto HSS_solve = [&](scalar_t* b) {
-      H.solve(ULV, weights);
+    auto HSS_solve = [&](scalar_t* bp) {
+      DenseMatrixWrapper<scalar_t> dmw_bp(size_t(M), size_t(1), bp, size_t(M));
+      H.solve(ULV, dmw_bp);
     };
 
     // Lambda for GMRes
     auto iter_wrapper = [&](const std::function<void(scalar_t*)>& prec) {
-      scalar_t opts_rel_tol       = 1e-10;
-      scalar_t opts_abs_tol       = 1e-10;
+      scalar_t opts_rel_tol       = 1e-05;
+      scalar_t opts_abs_tol       = 1e-15;
       int      opts_maxit         = 100;
       int      opts_gmres_restart = 30;
 
@@ -339,8 +343,9 @@ int main(int argc, char *argv[]) {
         opts_maxit,
         opts_gmres_restart,
         GramSchmidtType::MODIFIED,
-        false,                        // non_zero_guess,
-        true                          // verbose
+        false,                        // non_zero_guess?
+        true,                         // verbose?
+        hss_opts.rel_tol()            // to name output file
       );
     };
 
@@ -352,7 +357,25 @@ int main(int argc, char *argv[]) {
     H.solve(ULV, weights); // Inexact solve not good enough for c-err
   #endif
 
-  // weights.print("After-solve-weights",true,10);
+  // Check relative residual of the solution
+  DenseMatrix<scalar_t> weights_check(weights); // to check relative residual
+
+  gemv(
+    Trans::N,
+    scalar_t(1.0),
+    KMM,             // DenseMatrix
+    weights,         // ConstDenseMatrixWrapperPtr
+    scalar_t(0.0),
+    weights_check,   // DenseMatrix
+    0                // OMP task depth
+  );
+
+  weights_check.scaled_add(-1., z_check);
+  // cout << "# Bcheck.normF() " << weights_check.normF() << endl;
+  // cout << "# err_z.normF() " << z_check.normF() << endl;
+
+  cout << "# Solution relative error = ||Hd*(Hd\\z-z)||_F/||z||_F = "
+    << weights_check.normF() / z_check.normF() << endl;
   cout << "## Solve took: " << timer.elapsed() << std::endl;
 
   // Prediction
@@ -383,7 +406,7 @@ int main(int argc, char *argv[]) {
   }
 
   scalar_t c_err = 100.0 - (((m - incorrect_quant) / m) * 100);
-  // cout << "## Prediction took :" << timer.elapsed() << std::endl;
+  cout << "## Prediction took :" << timer.elapsed() << std::endl;
   cout << "## c-err: " << c_err << "%" << std::endl;
 
   return 0;

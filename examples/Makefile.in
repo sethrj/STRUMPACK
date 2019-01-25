@@ -1,8 +1,4 @@
-all: @C_EXAMPLES@ \
-	testPoisson2d testPoisson3d \
-	testMMdouble testMMdouble64 testMMfloat \
-	mtx2bin bin2mtx KernelRegression KernelRegressionNys \
-	@MPI_EXAMPLES@
+all: KernelRegressionNys
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@

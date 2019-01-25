@@ -6,7 +6,7 @@ project(STRUMPACK CXX C Fortran)
 # option(STRUMPACK_USE_METIS "Build with support for Metis" ON)
 
 option(STRUMPACK_USE_MPI "Build with MPI support" ON)
-option(STRUMPACK_USE_OPENMP "Use OpenMP for on-node threading tasking" ON)
+option(STRUMPACK_USE_OPENMP "Use OpenMP for on-node threading tasking" OFF)
 
 option(TPL_ENABLE_PARMETIS "Build with support for ParMetis" OFF)
 option(TPL_ENABLE_SCOTCH "Build with support for Scotch/PTScotch" OFF)
@@ -18,7 +18,7 @@ option(STRUMPACK_COUNT_FLOPS "Build with flop counters" ON)
 option(STRUMPACK_TASK_TIMERS "Build with timers for internal routines" OFF)
 option(STRUMPACK_BUILD_TESTS "Build the tests" ON)
 option(STRUMPACK_DEV_TESTING "Enable extensive testing" OFF)
-option(STRUMPACK_C_INTERFACE "Build the C interface" ON)
+option(STRUMPACK_C_INTERFACE "Build the C interface" OFF)
 
 ######################################################################
 # IDEAS: xSDK standards module
@@ -473,6 +473,10 @@ install(FILES
   src/dense/BLASLAPACKOpenMPTask.hpp
   src/dense/BLASLAPACKWrapper.hpp
   DESTINATION include/dense)
+
+install(FILES
+  src/exp/DenseGMRes.hpp
+  DESTINATION include/exp)
 
 install(FILES
   src/sparse/BiCGStab.hpp
