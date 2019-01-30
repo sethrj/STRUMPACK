@@ -37,7 +37,9 @@
 #include "kernel/KernelRegression.hpp"
 #include "misc/TaskTimer.hpp"
 #include "dense/DenseMatrix.hpp"
-#include "exp/DenseGMRes.hpp"
+//#include "exp/DenseGMRes.hpp"
+#include "sparse/GMRes.hpp"
+#include "sparse/BiCGStab.hpp"
 #include "StrumpackOptions.hpp"
 
 // enum class GramSchmidtType {
@@ -209,34 +211,37 @@ int main(int argc, char *argv[]) {
   // Kernel object setup for Nystrom (reduced) dataset
   auto K_Nystrom = create_kernel<scalar_t>(ktype, training_Nystrom, h, l0);
 
-  std::cout << "Forming Kmm ..." << std::endl;
+  std::cout << "Forming KMM ..." << std::endl;
   timer.start();
-  DenseMatrix<scalar_t> Kmm(M, M);
+  DenseMatrix<scalar_t> KMM(M, M);
   for (std::size_t j=0; j<M; j++)
     for (std::size_t i=0; i<M; i++)
-      Kmm(i, j) = K_Nystrom->eval(i, j); // Nystrom -reduced- kernel object
+      KMM(i, j) = K_Nystrom->eval(i, j); // Nystrom -reduced- kernel object
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
   // Kmm.print("Kmm",true,10);
 
-  std::cout << "Forming Knm ..." << std::endl;
+  std::cout << "Forming KnM ..." << std::endl;
   timer.start();
-  DenseMatrix<scalar_t> Knm(n, M);
+  DenseMatrix<scalar_t> KnM(n, M);
   for (std::size_t j=0; j<M; j++)
     for (std::size_t i=0; i<n; i++)
-      Knm(i, j) = K->eval(i, Mid[j]); // Full kernel object
-      // Knm(i, j) = K->eval(i, Mid[iperm[j]-1]);
+      KnM(i, j) = K->eval(i, Mid[j]); // Full kernel object
+      // KnM(i, j) = K->eval(i, Mid[iperm[j]-1]);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  // Knm.print("Knm",true,10);
+  // KnM.print("KnM",true,10);
 
   std::cout << "Forming H dense ..."  << std::endl;
-  std::cout << "H = (KnM^t)*(KnM) + n*lambda*(Kmm)" << std::endl;
+  std::cout << "H = (KnM^t)*(KnM) + n*lambda*(KMM)" << std::endl;
   timer.start();
-  DenseMatrix<scalar_t> Hdense(Kmm);
-  gemm(Trans::T, Trans::N, scalar_t(1.), Knm, Knm,
+  DenseMatrix<scalar_t> Hdense(KMM);
+  gemm(Trans::T, Trans::N, scalar_t(1.), KnM, KnM,
        scalar_t(n*lambda), Hdense);
   cout << "## Elapsed: " << timer.elapsed() << std::endl;
-  DenseMatrix<scalar_t> Hc(Hdense);  // Copy to check dense to HSS compression error
-  DenseMatrix<scalar_t> KMM(Hdense); // Copy for GMRres
+
+  DenseMatrix<scalar_t> Hdense_LU(Hdense);  // Copy to check dense to HSS compression error
+  auto piv = Hdense_LU.LU(0);
+
+  // DenseMatrix<scalar_t> KMM(Hdense); // Copy for GMRres
 
   // Clustering
   std::cout << "Clustering ..." << std::endl;
@@ -275,7 +280,7 @@ int main(int argc, char *argv[]) {
   cout << "## Compression took: " << timer.elapsed() << std::endl;
 
   auto HSSd = H.dense();
-  HSSd.scaled_add(-1., Hc);
+  HSSd.scaled_add(-1., Hdense);
   cout << "# Compression relative error = ||HSSd-Hd||_F/||Hd||_F = "
        << HSSd.normF() / Hdense.normF() << endl;
 
@@ -287,11 +292,11 @@ int main(int argc, char *argv[]) {
 
   cout << "# Solve ..." << std::endl;
   timer.start();
-  // Operation: z = (Knm') * y;
+  // Operation: z = (KnM') * y;
   // Operation: weights = H\z;
   DenseMatrix<scalar_t> y(n, 1, &train_labels[0], n);
   DenseMatrix<scalar_t> z(M, 1);
-  gemm(Trans::T, Trans::N, scalar_t(1.), Knm, y, scalar_t(0.), z);
+  gemm(Trans::T, Trans::N, scalar_t(1.), KnM, y, scalar_t(0.), z);
   DenseMatrix<scalar_t> z_check(z);   // copy to check relative residual of the solve
   DenseMatrix<scalar_t> weights(z); // for solve system here
 
@@ -309,7 +314,7 @@ int main(int argc, char *argv[]) {
       gemv(
         Trans::N,
         scalar_t(1.0),
-        KMM,             // DenseMatrix
+        Hdense,          // DenseMatrix
         *cdmw_x,         // ConstDenseMatrixWrapperPtr
         scalar_t(0.0),
         dmw_b,           // DenseMatrix
@@ -321,16 +326,20 @@ int main(int argc, char *argv[]) {
     auto HSS_solve = [&](scalar_t* bp) {
       DenseMatrixWrapper<scalar_t> dmw_bp(size_t(M), size_t(1), bp, size_t(M));
       H.solve(ULV, dmw_bp);
+      // auto x = Hdense_LU.solve(dmw_bp, piv, 0);
+      // dmw_bp.copy(x);
     };
 
     // Lambda for GMRes
     auto iter_wrapper = [&](const std::function<void(scalar_t*)>& prec) {
-      scalar_t opts_rel_tol       = 1e-05;
+      scalar_t opts_rel_tol       = 1e-5;
       scalar_t opts_abs_tol       = 1e-15;
       int      opts_maxit         = 100;
       int      opts_gmres_restart = 30;
+      int      totit              = 0;
 
-      DenseGMRes
+      //GMRes
+      BiCGStab
       (
         spmv,
         prec,
@@ -339,13 +348,13 @@ int main(int argc, char *argv[]) {
         z_gmres.data(),               // const scalar_t*
         opts_rel_tol,
         opts_abs_tol,
-        //  totit,                    // unused
+        totit,                    // unused
         opts_maxit,
-        opts_gmres_restart,
-        GramSchmidtType::MODIFIED,
+        //opts_gmres_restart,
+        //GramSchmidtType::MODIFIED,
         false,                        // non_zero_guess?
-        true,                         // verbose?
-        hss_opts.rel_tol()            // to name output file
+        true//,                         // verbose?
+        //hss_opts.rel_tol()            // to name output file
       );
     };
 
@@ -363,7 +372,7 @@ int main(int argc, char *argv[]) {
   gemv(
     Trans::N,
     scalar_t(1.0),
-    KMM,             // DenseMatrix
+    Hdense,          // DenseMatrix
     weights,         // ConstDenseMatrixWrapperPtr
     scalar_t(0.0),
     weights_check,   // DenseMatrix
@@ -371,8 +380,8 @@ int main(int argc, char *argv[]) {
   );
 
   weights_check.scaled_add(-1., z_check);
-  // cout << "# Bcheck.normF() " << weights_check.normF() << endl;
-  // cout << "# err_z.normF() " << z_check.normF() << endl;
+  cout << "# Bcheck.normF() " << weights_check.normF() << endl;
+  cout << "# err_z.normF() " << z_check.normF() << endl;
 
   cout << "# Solution relative error = ||Hd*(Hd\\z-z)||_F/||z||_F = "
     << weights_check.normF() / z_check.normF() << endl;
