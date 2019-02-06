@@ -241,8 +241,6 @@ int main(int argc, char *argv[]) {
   DenseMatrix<scalar_t> Hdense_LU(Hdense);  // Copy to check dense to HSS compression error
   auto piv = Hdense_LU.LU(0);
 
-  // DenseMatrix<scalar_t> KMM(Hdense); // Copy for GMRres
-
   // Clustering
   std::cout << "Clustering ..." << std::endl;
   timer.start();
@@ -338,24 +336,44 @@ int main(int argc, char *argv[]) {
       int      opts_gmres_restart = 30;
       int      totit              = 0;
 
-      //GMRes
-      BiCGStab
-      (
-        spmv,
-        prec,
-        (size_t)M,
-        weights_gmres.data(),         // scalar_t*
-        z_gmres.data(),               // const scalar_t*
-        opts_rel_tol,
-        opts_abs_tol,
-        totit,                    // unused
-        opts_maxit,
-        //opts_gmres_restart,
-        //GramSchmidtType::MODIFIED,
-        false,                        // non_zero_guess?
-        true//,                         // verbose?
-        //hss_opts.rel_tol()            // to name output file
-      );
+      #if 1
+        GMRes
+        (
+          spmv,
+          prec,
+          (size_t)M,
+          weights_gmres.data(),         // scalar_t*
+          z_gmres.data(),               // const scalar_t*
+          opts_rel_tol,
+          opts_abs_tol,
+          totit,                    // unused
+          opts_maxit,
+          opts_gmres_restart,
+          GramSchmidtType::MODIFIED,
+          false,                        // non_zero_guess?
+          true//,                         // verbose?
+          //hss_opts.rel_tol()            // to name output file
+        );
+      #else // BiCGstab
+        BiCGStab
+        (
+          spmv,
+          prec,
+          (size_t)M,
+          weights_gmres.data(),         // scalar_t*
+          z_gmres.data(),               // const scalar_t*
+          opts_rel_tol,
+          opts_abs_tol,
+          totit,                    // unused
+          opts_maxit,
+          //opts_gmres_restart,
+          //GramSchmidtType::MODIFIED,
+          false,                        // non_zero_guess?
+          true//,                         // verbose?
+          //hss_opts.rel_tol()            // to name output file
+        );
+      #endif
+
     };
 
     // Execute GMRES

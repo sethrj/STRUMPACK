@@ -72,7 +72,7 @@ namespace strumpack {
         else std::cout << "# compression failed!!!" << std::endl;
         std::cout << "# rank(H) = " << H.rank() << std::endl
                   << "# HSS memory(H) = "
-                  << H.memory() / 1e6 << " MB " << std::endl << std::endl
+                  << H.memory() / 1e6 << " MB" << std::endl << std::endl
                   << "# factorization start" << std::endl;
       }
       timer.start();
