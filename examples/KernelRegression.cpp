@@ -60,7 +60,7 @@ read_from_file(string filename) {
 
 
 int main(int argc, char *argv[]) {
-  using scalar_t = float;
+  using scalar_t = double;
   string filename("smalltest.dat");
   size_t d = 2;
   scalar_t h = 3.;
@@ -123,10 +123,8 @@ int main(int argc, char *argv[]) {
     if ((prediction[i] >= 0 && test_labels[i] < 0) ||
         (prediction[i] < 0 && test_labels[i] >= 0))
       incorrect_quant++;
-  cout << "# prediction score: "
-       << (float(m - incorrect_quant) / m) * 100. << "%" << endl
-       << "# c-err: "
-       << (float(incorrect_quant) / m) * 100. << "%"
+  cout << "# c-err: "
+       << (scalar_t(incorrect_quant) / m) * 100. << "%"
        << endl << endl;
 
   return 0;

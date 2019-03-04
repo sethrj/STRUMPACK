@@ -916,11 +916,21 @@ namespace strumpack {
 
     template<typename scalar_t> void HSSMatrix<scalar_t>::draw
     (std::ostream& of, std::size_t rlo, std::size_t clo) const {
+
+      int fontScale = 8;
+      int maxRank = 0;
+      int fontSize = 0;
+      int x1 = 0;
+      int y1 = 0;
+      int x2 = 0;
+      int y2 = 0;
+
       if (!this->leaf()) {
         char prev = std::cout.fill('0');
         int rank0 = std::max(_B01.rows(), _B01.cols());
         int rank1 = std::max(_B10.rows(), _B10.cols());
         int minmn = std::min(this->rows(), this->cols());
+        int maxrank= std::max(rank0, rank1);
         int red = std::floor(255.0 * rank0 / minmn);
         int blue = 255 - red;
         of << "set obj rect from "
@@ -931,6 +941,18 @@ namespace strumpack {
            << std::hex << std::setw(2) << std::setfill('0') << red
            << "00" << std::setw(2)  << std::setfill('0') << blue
            << "'" << std::dec << std::endl;
+        // Label
+        maxRank  = _B01.cols();
+        x1       = rlo;
+        y1       = clo+this->_ch[0]->cols();
+        x2       = rlo+this->_ch[0]->rows();
+        y2       = clo+this->cols();
+        fontSize = ((x2-x1)/fontScale) > 4 ? ((x2-x1)/fontScale) : 4;
+        of << "set label '"
+           << _B01.rows() << "," << _B01.cols() << "' at " << x1+((x2-x1)/2)
+           << ","     << y1+((y2-y1)/2)
+           << " center font 'Arial," << fontSize << "'" << std::endl;
+        // End of label
         red = std::floor(255.0 * rank1 / minmn);
         blue = 255 - red;
         of << "set obj rect from "
@@ -941,18 +963,42 @@ namespace strumpack {
            << std::hex << std::setw(2) << std::setfill('0') << red
            << "00" << std::setw(2)  << std::setfill('0') << blue
            << "'" << std::dec << std::endl;
+        // Label
+        maxRank  = _B10.cols();
+        x1       = rlo+this->_ch[0]->rows();
+        y1       = clo;
+        x2       = rlo+this->rows();
+        y2       = clo+this->_ch[0]->cols();
+        fontSize = ((x2-x1)/fontScale) > 4 ? ((x2-x1)/fontScale) : 4;
+        of << "set label '"
+           << _B10.rows() << "," << _B10.cols() << "' at " << x1+((x2-x1)/2)
+           << ","     << y1+((y2-y1)/2)
+           << " center font 'Arial," << fontSize << "'" << std::endl;
+        // End of label
         std::cout.fill(prev);
         this->_ch[0]->draw(of, rlo, clo);
         this->_ch[1]->draw
           (of, rlo+this->_ch[0]->rows(), clo+this->_ch[0]->cols());
-      } else {
+      }
+      else {
         of << "set obj rect from "
            << rlo << ", " << clo << " to "
            << rlo+this->rows() << ", " << clo+this->cols()
-           << " fc rgb 'red'" << std::endl;
+           << " fc rgb 'white'" << std::endl;
+        // Label
+        x1       = rlo;
+        y1       = clo;
+        x2       = rlo+this->rows();
+        y2       = clo+this->cols();
+        maxRank  = x2-x1;
+        fontSize = ((x2-x1)/fontScale) > 4 ? ((x2-x1)/fontScale) : 4;
+        of << "set label '"
+           << maxRank << "' at " << x1+((x2-x1)/2)
+           << ","     << y1+((y2-y1)/2)
+           << " center font 'Arial," << fontSize << "'" << std::endl;
+        // End of label
       }
     }
-
 
     /**
      * Write a gnuplot script to draw this an matrix.

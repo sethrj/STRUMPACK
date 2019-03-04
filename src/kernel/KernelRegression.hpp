@@ -64,6 +64,7 @@ namespace strumpack {
       B.lapmt(perm, true);
       perm.clear();
       if (opts.verbose()) {
+        draw(H,"plot_");
         std::cout << "# HSS compression time = "
                   << timer.elapsed() << std::endl;
         if (H.is_compressed())
@@ -72,10 +73,25 @@ namespace strumpack {
                     << " with " << H.levels() << " levels" << std::endl
                     << "# compression succeeded!" << std::endl;
         else std::cout << "# compression failed!!!" << std::endl;
-        std::cout << "# rank(H) = " << H.rank() << std::endl
+        std::cout << "# rank_H = " << H.rank() << std::endl
                   << "# HSS memory(H) = "
-                  << H.memory() / 1e6 << " MB " << std::endl << std::endl
+                  << H.memory() / 1e6 << " MB" << std::endl << std::endl
                   << "# factorization start" << std::endl;
+      }
+      // Computing error against dense matrix
+      if ( n()<= 10000){
+        DenseM_t Kdense(n(),n());
+        for(int j = 0; j < n(); j++){
+          for(int i = 0; i < n(); i++){
+            Kdense(i,j) = eval(i,j);
+          }
+        }
+        auto HSSd = H.dense();
+        HSSd.scaled_add(-1., Kdense);
+        std::cout << "# Compression relative error = ||HSSd-Hd||_F/||Hd||_F = " <<
+        std::setprecision(2) << std::scientific <<
+        HSSd.normF() / Kdense.normF() << std::endl;
+        std::cout << std::defaultfloat;
       }
       timer.start();
       auto ULV = H.factor();
