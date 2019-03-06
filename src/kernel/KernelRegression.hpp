@@ -89,9 +89,7 @@ namespace strumpack {
         auto HSSd = H.dense();
         HSSd.scaled_add(-1., Kdense);
         std::cout << "# Compression relative error = ||HSSd-Hd||_F/||Hd||_F = " <<
-        std::setprecision(2) << std::scientific <<
         HSSd.normF() / Kdense.normF() << std::endl;
-        std::cout << std::defaultfloat;
       }
       timer.start();
       auto ULV = H.factor();
