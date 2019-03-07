@@ -266,7 +266,7 @@ int main(int argc, char *argv[]) {
               << "# compression succeeded!" << std::endl;
   else std::cout << "# compression failed!!!" << std::endl;
 
-  cout << "# rank_H = " << H.rank() << std::endl;
+  cout << "## rank_H = " << H.rank() << std::endl;
   cout << "# memory_H = " << H.memory()/1e6 << " MB, "
        << 100. * H.memory() / Hdense.memory() << "% of dense" << std::endl;
   cout << "## Compression took: " << timer.elapsed() << std::endl;
@@ -274,7 +274,7 @@ int main(int argc, char *argv[]) {
   if ( M <= 3000 ){
     auto HSSd = H.dense();
     HSSd.scaled_add(-1., Hdense);
-    cout << "# Compression rel error against dense = ||HSSd-Hd||_F/||Hd||_F = "
+    cout << "## Compression_error against dense = ||HSSd-Hd||_F/||Hd||_F = "
         << HSSd.normF() / Hdense.normF() << endl;
   }
 
