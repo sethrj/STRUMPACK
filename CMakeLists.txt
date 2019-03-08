@@ -629,10 +629,12 @@ endif()
 if(STRUMPACK_USE_MPI)
   set(STRUMPACK_C_COMPILER "${MPI_C_COMPILER}")
   set(STRUMPACK_CXX_COMPILER "${MPI_CXX_COMPILER}")
+  set(STRUMPACK_Fortran_COMPILER "${MPI_Fortran_COMPILER}")
   set(MPI_EXAMPLES "KernelRegressionMPI testPoisson2dMPI testPoisson2dMPIDist testPoisson3dMPIDist testMMdouble testMMdoubleMPI testMMdoubleMPIDist testMMdouble64 testMMdoubleMPIDist64 testMMfloat testMMfloatMPIDist")
 else()
   set(STRUMPACK_C_COMPILER "${CMAKE_C_COMPILER}")
   set(STRUMPACK_CXX_COMPILER "${CMAKE_CXX_COMPILER}")
+  set(STRUMPACK_Fortran_COMPILER "${CMAKE_Fortran_COMPILER}")
 endif()
 configure_file(${CMAKE_SOURCE_DIR}/examples/Makefile.in
   ${CMAKE_SOURCE_DIR}/examples/Makefile @ONLY)
@@ -665,6 +667,16 @@ configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegression.py
   ${CMAKE_BINARY_DIR}/examples/KernelRegression.py COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionMPI.py
   ${CMAKE_BINARY_DIR}/examples/KernelRegressionMPI.py COPYONLY)
+
+configure_file(${CMAKE_SOURCE_DIR}/examples/Helmholtz/Makefile.in
+  ${CMAKE_SOURCE_DIR}/examples/Helmholtz/Makefile @ONLY)
+configure_file(${CMAKE_SOURCE_DIR}/examples/Helmholtz/Makefile
+  ${CMAKE_BINARY_DIR}/examples/Helmholtz/Makefile COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/examples/Helmholtz/main.cpp
+  ${CMAKE_BINARY_DIR}/examples/Helmholtz/main.cpp COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/examples/Helmholtz/genmatrix3D_core.f
+  ${CMAKE_BINARY_DIR}/examples/Helmholtz/genmatrix3D_core.f COPYONLY)
+
 
 if(STRUMPACK_C_INTERFACE)
   configure_file(${CMAKE_SOURCE_DIR}/examples/sexample.c
