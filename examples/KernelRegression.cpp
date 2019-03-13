@@ -60,6 +60,8 @@ read_from_file(string filename) {
 
 
 int main(int argc, char *argv[]) {
+  TaskTimer total_time("total_time");
+  total_time.start();
   using scalar_t = double;
   string filename("smalltest.dat");
   size_t d = 2;
@@ -90,7 +92,7 @@ int main(int argc, char *argv[]) {
 
   TaskTimer timer("compression");
 
-  cout << endl << "# Reading data ..." << endl;
+  cout << "# Reading data ..." << endl;
   timer.start();
   // Read from csv files
   auto training     = read_from_file<scalar_t>(filename + "_train.csv");
@@ -127,5 +129,6 @@ int main(int argc, char *argv[]) {
        << (scalar_t(incorrect_quant) / m) * 100. << "%"
        << endl << endl;
 
+  cout << "# total_time: " << total_time.elapsed() << endl << endl;
   return 0;
 }

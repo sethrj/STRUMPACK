@@ -53,7 +53,7 @@ namespace strumpack {
         find_approximate_neighbors
           (K.data(), opts.ann_iterations(), ann_number, ann, scores, gen);
         if (opts.verbose())
-          std::cout << "# k-ANN=" << ann_number
+          std::cout << "## k-ANN= " << ann_number
                     << " approximate neighbor search time = "
                     << timer.elapsed() << std::endl;
         WorkCompressANN<scalar_t> w;
