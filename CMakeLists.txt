@@ -664,6 +664,8 @@ configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegression.py
   ${CMAKE_BINARY_DIR}/examples/KernelRegression.py COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionNys.cpp
   ${CMAKE_BINARY_DIR}/examples/KernelRegressionNys.cpp COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionANNdriver.cpp
+  ${CMAKE_BINARY_DIR}/examples/KernelRegressionANNdriver.cpp COPYONLY)
 
 if(STRUMPACK_C_INTERFACE)
   configure_file(${CMAKE_SOURCE_DIR}/examples/sexample.c
@@ -693,6 +695,8 @@ if(STRUMPACK_USE_MPI)
     ${CMAKE_BINARY_DIR}/examples/testMMfloatMPIDist.cpp COPYONLY)
   configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionMPI.cpp
     ${CMAKE_BINARY_DIR}/examples/KernelRegressionMPI.cpp COPYONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionANNdriverMPI.cpp
+  ${CMAKE_BINARY_DIR}/examples/KernelRegressionANNdriverMPI.cpp COPYONLY)
 endif()
 
 if(STRUMPACK_BUILD_TESTS)

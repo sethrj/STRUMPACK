@@ -106,9 +106,8 @@ int main(int argc, char *argv[]) {
   cout << "# training dataset = " << n << " x " << d << endl;
   cout << "# testing dataset  = " << m << " x " << d << endl << endl;
 
-  DenseMatrixWrapper<scalar_t>
-    training_points(d, n, training.data(), d),
-    test_points(d, m, testing.data(), d);
+  DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d),
+                               test_points(d, m, testing.data(), d);
 
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
 
@@ -123,12 +122,12 @@ int main(int argc, char *argv[]) {
   size_t incorrect_quant = 0;
   for (size_t i=0; i<m; i++)
     if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-        (prediction[i] < 0 && test_labels[i] >= 0))
+      (prediction[i] < 0 && test_labels[i] >= 0))
       incorrect_quant++;
   cout << "# c-err: "
-       << (scalar_t(incorrect_quant) / m) * 100. << "%"
-       << endl << endl;
+  << (scalar_t(incorrect_quant) / m) * 100. << "%"
+  << endl << endl;
 
   cout << "# total_time: " << total_time.elapsed() << endl << endl;
   return 0;
-}
+  }

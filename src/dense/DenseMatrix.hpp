@@ -38,6 +38,8 @@
 #include <iomanip>
 #include <cassert>
 #include <algorithm>
+#include <iostream>
+#include <fstream>
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -310,6 +312,20 @@ namespace strumpack {
      */
     void print_to_file
     (std::string name, std::string filename, int width=8) const;
+
+    /**
+     * Print matrix to a binary file.
+     *
+     */
+    void print_to_binary_file
+    (std::string filename) const;
+
+    /**
+     * Read matrix from a binary file.
+     *
+     */
+    void read_from_binary_file
+    (std::string filename) const;
 
     /**
      * Fill the matrix with random numbers, using random number
@@ -1162,7 +1178,7 @@ namespace strumpack {
   template<typename scalar_t> void
   DenseMatrix<scalar_t>::print(std::string name, bool all, int width) const {
     std::cout << name << " = [  % " << rows() << "x" << cols()
-              << ", ld=" << ld() << ", norm=" << norm() << std::endl;
+              << ", ld=" << ld() /* << ", norm=" << norm()*/ << std::endl;
     if (all || (rows() <= 20 && cols() <= 32)) {
       for (std::size_t i=0; i<rows(); i++) {
         for (std::size_t j=0; j<cols(); j++)
@@ -1185,6 +1201,20 @@ namespace strumpack {
       fs << std::endl;
     }
     fs << "];" << std::endl << std::endl;
+  }
+
+  template<typename scalar_t> void DenseMatrix<scalar_t>::print_to_binary_file
+  (std::string filename) const {
+    std::ofstream file(filename.c_str(), std::ios::binary);
+    if (file.is_open())
+      file.write( (char*)data_, rows()*cols()*sizeof(scalar_t) );
+  }
+
+  template<typename scalar_t> void DenseMatrix<scalar_t>::read_from_binary_file
+  (std::string filename) const {
+    std::ifstream file(filename.c_str(), std::ios::binary);
+    if (file.is_open())
+      file.read( (char*)data_, rows()*cols()*sizeof(scalar_t) );
   }
 
   template<typename scalar_t> void
