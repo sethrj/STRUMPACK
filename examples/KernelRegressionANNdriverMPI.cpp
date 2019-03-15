@@ -63,130 +63,118 @@ read_from_file(string filename) {
   return data;
 }
 
-// inline scalar_t dist2(scalar_t* x, scalar_t* y, int d) {
-//   scalar_t k = 0.;
-//   for (int i=0; i<d; i++) k += pow(x[i] - y[i], 2.);
-//     return k;
-// }
-
-// inline scalar_t Gauss_kernel(scalar_t* x, scalar_t* y, int d, scalar_t h) {
-//   return exp(-dist2(x, y, d)/(2.*h*h));
-// }
-
-// void printSample(scalar_t* x) {
-//   int d = 8;
-//   for (int i = 0; i < d; ++i)
-//     cout << x[i] << " ";
-//   cout << endl;
-// }
-
-// void printPermutationVector(std::string NAME, std::vector<int> v) {
-//   cout << NAME << ": ";
-//   for(auto &i : v)
-//     cout << i-1 << " ";
-//   cout << endl;
-// }
-
-// void printMatrixBlock(DenseMatrix<scalar_t> Mat) {
-//   for (int i = 0; i < 4; ++i){
-//     for (int j = 0; j < 4; ++j){
-//       cout << Mat(i,j) << " ";
-//     }
-//     cout << endl;
-//   }
-//   cout << endl;
-// }
-
-// inline bool areSameScalarsToEps(scalar_t a, scalar_t b) {
-//   return fabs(a - b) < 1e-4;
-// }
-
-// void print_const_scalar_t(string str, const scalar_t* XXX){
-//   cout << "const_" << str << endl;
-//   cout << XXX[0] << endl;
-//   cout << XXX[1] << endl;
-// }
-
-// void print_scalar_t(string str, scalar_t* XXX){
-//   cout << str << endl;
-//   cout << XXX[0] << endl;
-//   cout << XXX[1] << endl;
-// }
-
 int main(int argc, char *argv[]) {
-  // TaskTimer timer("compression");
-  // string filename("smalltest.dat");
-  // size_t d = 2;
-  // scalar_t h = 3.;
-  // scalar_t lambda = 1.;
-  // KernelType ktype = KernelType::GAUSS;
-  // string mode("test");
+  using scalar_t = double;
 
-  // cout << "# usage: ./KernelRegressionANNdriver file d h lambda "
-  // << "kernel(Gauss, Laplace) mode(valid, test) M gmres_it gmres_rtol" << std::endl;
-  // if (argc > 1) filename   = string(argv[1]);
-  // if (argc > 2) d          = stoi(argv[2]);
-  // if (argc > 3) h          = stof(argv[3]);
-  // if (argc > 4) lambda     = stof(argv[4]);
-  // if (argc > 5) ktype      = kernel_type(string(argv[5]));
-  // if (argc > 6) mode       = string(argv[6]);
-  // // if (argc > 7) M          = stoi(argv[7]);
-  // // if (argc > 8) gmres_it   = stoi(argv[8]);
-  // // if (argc > 9) gmres_rtol = stof(argv[9]);
-  // cout << std::endl;
-  // cout << "# data dimension   = " << d << std::endl;
-  // cout << "# kernel sigma (h) = " << h << std::endl;
-  // cout << "# lambda           = " << lambda << std::endl;
-  // cout << "# kernel type      = " << get_name(ktype) << std::endl;
-  // cout << "# validation/test  = " << mode << std::endl;
+  TaskTimer timer_all("all");
+  timer_all.start();
+  MPI_Init(&argc, &argv);
+  MPIComm c;
 
-  // HSSOptions<scalar_t> hss_opts;
-  // hss_opts.set_verbose(true);
-  // hss_opts.set_from_command_line(argc, argv);
-  // hss_opts.describe_options();
-  // cout << "# hss_rel_tol      = " << hss_opts.rel_tol() << std::endl;
-  // cout << "# hss_abs_tol      = " << hss_opts.abs_tol() << std::endl;
-  // cout << "# hss_leaf_size    = " << hss_opts.leaf_size() << std::endl ;
-  // cout << "# hss_d0           = " << hss_opts.d0() << std::endl ;
-  // cout << "# hss_dd           = " << hss_opts.dd() << std::endl;
+  string filename("smalltest.dat");
+  string folder(".");
+  size_t d = 2;
+  scalar_t h = 3.;
+  scalar_t lambda = 1.;
+  KernelType ktype = KernelType::GAUSS;
+  string mode("test");
+  TaskTimer timer("misc");
 
-  // cout << "# Reading data..." << std::endl;
-  // timer.start();
-  // auto training     = read_from_file<scalar_t>(filename + "_train.csv");
-  // auto testing      = read_from_file<scalar_t>(filename + "_" + mode + ".csv");
-  // auto train_labels = read_from_file<scalar_t>(filename + "_train_label.csv");
-  // auto test_labels  = read_from_file<scalar_t>(filename + "_" + mode + "_label.csv");
-  // cout << "# Reading took " << timer.elapsed() << std::endl << std::endl;
+  if (c.is_root())
+    cout << "# usage: ./KernelRegressionANNdriverMPI file d h lambda "
+      << "kernel(Gauss, Laplace) mode(valid, test) folder" << std::endl;
+  if (argc > 1) filename   = string(argv[1]);
+  if (argc > 2) d          = stoi(argv[2]);
+  if (argc > 3) h          = stof(argv[3]);
+  if (argc > 4) lambda     = stof(argv[4]);
+  if (argc > 5) ktype      = kernel_type(string(argv[5]));
+  if (argc > 6) mode       = string(argv[6]);
+  if (argc > 7) folder     = string(argv[7]);
+  if (c.is_root()){
+    cout << std::endl;
+    cout << "# data dimension   = " << d << std::endl;
+    cout << "# kernel sigma (h) = " << h << std::endl;
+    cout << "# lambda           = " << lambda << std::endl;
+    cout << "# kernel type      = " << get_name(ktype) << std::endl;
+    cout << "# validation/test  = " << mode << std::endl;
+  }
 
-  // size_t n = training.size() / d;
-  // size_t m = testing.size() / d;
-  // cout << "# training dataset = " << n << " x " << d << std::endl;
-  // cout << "# testing dataset  = " << m << " x " << d << std::endl;
+  HSSOptions<scalar_t> hss_opts;
+  hss_opts.set_verbose(false);
+  hss_opts.set_from_command_line(argc, argv);
+  if (hss_opts.verbose() && c.is_root()){
+    hss_opts.describe_options();
+  cout << "# hss_rel_tol      = " << hss_opts.rel_tol() << std::endl;
+  cout << "# hss_abs_tol      = " << hss_opts.abs_tol() << std::endl;
+  cout << "# hss_leaf_size    = " << hss_opts.leaf_size() << std::endl ;
+  cout << "# hss_d0           = " << hss_opts.d0() << std::endl ;
+  cout << "# hss_dd           = " << hss_opts.dd() << std::endl;
+  }
 
-  // DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d);
-  // auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
+  if (c.is_root())
+    cout << "# Reading data..." << std::endl;
+  timer.start();
+  auto training     = read_from_file<scalar_t>(filename + "_train.csv");
+  auto testing      = read_from_file<scalar_t>(filename + "_" + mode + ".csv");
+  auto train_labels = read_from_file<scalar_t>(filename + "_train_label.csv");
+  auto test_labels  = read_from_file<scalar_t>(filename + "_" + mode + "_label.csv");
+  if (c.is_root())
+    cout << "# Reading data took " << timer.elapsed() << std::endl << std::endl;
 
-  // // std::cout << "Forming Knn..." << std::endl;
-  // // timer.start();
-  // // DenseMatrix<scalar_t> Knn(n, n);
-  // // for (std::size_t j=0; j<n; j++)
-  // //   for (std::size_t i=0; i<n; i++)
-  // //     Knn(i, j) = K->eval(i, j);
-  // //  cout << "## Elapsed: " << timer.elapsed() << std::endl;
+  size_t n = training.size() / d;
+  size_t m = testing.size() / d;
+  if (c.is_root()){
+    cout << "# training dataset = " << n << " x " << d << std::endl;
+    cout << "# testing dataset  = " << m << " x " << d << std::endl;
+  }
 
-  // std::mt19937 gen(1);
-  // DenseMatrix<std::uint32_t> ann;
-  // DenseMatrix<scalar_t> scores;
+  DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d);
+  auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
 
-  // timer.start();
-  // std::cout << "Computing ANN..." << std::endl;
+  // Compute kann
+  std::mt19937 gen(1);
+  int kann = hss_opts.approximate_neighbors();
 
-  // find_approximate_neighbors(K->data(), hss_opts.ann_iterations(),
-  //   hss_opts.approximate_neighbors(), ann, scores, gen);
+  string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"
+                        +std::to_string(n)+".binmatrix";
+  string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"
+                        +std::to_string(n)+".binmatrix";
 
-  // std::cout << "## k-ANN = " << hss_opts.approximate_neighbors()
-  // << " approximate neighbor search time = "
-  // << timer.elapsed() << std::endl;
+  if (c.is_root()){
+    std::cout << std::endl;
+    std::cout << "ann_filename: " << ann_filename << std::endl;
+    std::cout << "scores_filename: " << scores_filename << std::endl;
+    std::cout << std::endl;
+  }
 
+  // if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+  //   fclose(file);
+  //   DenseMatrix<std::uint32_t> ann(kann,n);
+  //   DenseMatrix<scalar_t> scores(kann,n);
+  //   std::cout << std::endl << "Found ANN matrices files, reading" << std::endl;
+  //   ann.read_from_binary_file(ann_filename);
+  //   scores.read_from_binary_file(scores_filename);
+  //   ann.print("ann_read");
+  //   scores.print("scores_read");
+  // } else {
+  //   DenseMatrix<std::uint32_t> ann;
+  //   DenseMatrix<scalar_t> scores;
+  //   timer.start();
+  //   std::cout << std::endl << "Computing ANN..." << std::endl;
+  //   find_approximate_neighbors(K->data(), hss_opts.ann_iterations(),
+  //     kann, ann, scores, gen);
+  //   std::cout << "## k-ANN = " << kann
+  //   << " approximate neighbor search time = "
+  //   << timer.elapsed() << std::endl;
+  //   std::cout << "Saving ANN matrices to file" << std::endl;
+  //   ann.print_to_binary_file(ann_filename);
+  //   scores.print_to_binary_file(scores_filename);
+  // }
+
+  if (c.is_root())
+    std::cout << "# total_time: "
+      << timer_all.elapsed() << std::endl << std::endl;
+
+  MPI_Finalize();
   return 0;
 }

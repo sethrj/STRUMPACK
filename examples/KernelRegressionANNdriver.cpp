@@ -133,8 +133,8 @@ int main(int argc, char *argv[]) {
     std::cout << std::endl << "Found ANN matrices files, reading" << std::endl;
     ann.read_from_binary_file(ann_filename);
     scores.read_from_binary_file(scores_filename);
-    ann.print("ann_read");
-    scores.print("scores_read");
+    ann.print("ann_read",true);
+    scores.print("scores_read",true);
   } else {
     DenseMatrix<std::uint32_t> ann;
     DenseMatrix<scalar_t> scores;
