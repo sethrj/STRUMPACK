@@ -99,7 +99,7 @@ namespace strumpack {
         std::cout << "# factorization time = "
                   << timer.elapsed() << std::endl
                   << "# solution start..." << std::endl;
-#if !defined(ITERATIVE_REFINEMENT)
+#if ITERATIVE_REFINEMENT == 1
       DenseMW_t rhs(n(), 1, labels.data(), n());
       DenseM_t weights(rhs), residual(n(), 1);
       H.solve(ULV, weights);
@@ -253,7 +253,7 @@ namespace strumpack {
       DenseMW_t cB(n(), 1, labels.data(), n());
       DistM_t weights(&grid, n(), 1);
       weights.scatter(cB);
-#if defined(ITERATIVE_REFINEMENT)
+#if ITERATIVE_REFINEMENT == 1
       DistM_t rhs(weights), residual(&grid, n(), 1);
       H.solve(ULV, weights);
       auto rhs_normF = rhs.normF();

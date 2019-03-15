@@ -86,10 +86,10 @@ int main(int argc, char *argv[]) {
   cout << "# validation/test = " << mode << endl << endl;
 
   HSSOptions<scalar_t> hss_opts;
-  hss_opts.set_verbose(true);
+  hss_opts.set_verbose(false);
   hss_opts.set_from_command_line(argc, argv);
-  hss_opts.describe_options();
-
+  if (hss_opts.verbose())
+    hss_opts.describe_options();
   TaskTimer timer("compression");
 
   cout << "# Reading data ..." << endl;
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
       incorrect_quant++;
   cout << "# c-err: "
   << (scalar_t(incorrect_quant) / m) * 100. << "%"
-  << endl << endl;
+  << endl;
 
   cout << "# total_time: " << total_time.elapsed() << endl << endl;
   return 0;

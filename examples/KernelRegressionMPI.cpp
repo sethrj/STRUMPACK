@@ -62,10 +62,13 @@ int main(int argc, char *argv[]) {
   // HODLR code does not support float (yet)
   using scalar_t = double;
 
+  TaskTimer timer_all("all");
+  timer_all.start();
   MPI_Init(&argc, &argv);
   MPIComm c;
 
   string filename("smalltest.dat");
+  string folder(".");
   int d = 2;
   scalar_t h = 3.;
   scalar_t lambda = 1.;
@@ -75,13 +78,14 @@ int main(int argc, char *argv[]) {
 
   if (c.is_root())
     cout << "# usage: ./KernelRegression file d h lambda "
-         << "kernel(Gauss, Laplace) mode(valid, test)" << endl;
+         << "kernel(Gauss, Laplace) mode(valid, test) folder" << endl;
   if (argc > 1) filename = string(argv[1]);
   if (argc > 2) d = stoi(argv[2]);
   if (argc > 3) h = stof(argv[3]);
   if (argc > 4) lambda = stof(argv[4]);
   if (argc > 5) ktype = kernel_type(string(argv[5]));
   if (argc > 6) mode = string(argv[6]);
+  if (argc > 7) folder = string(argv[7]);
   if (c.is_root())
     cout << "# data dimension  = " << d << endl
          << "# kernel h        = " << h << endl
@@ -116,7 +120,7 @@ int main(int argc, char *argv[]) {
       << (float(m - incorrect_quant) / m) * 100. << "%" << endl
       << "# c-err: "
       << (float(incorrect_quant) / m) * 100. << "%"
-      << endl << endl;
+      << endl;
     }
   };
 
@@ -124,9 +128,10 @@ int main(int argc, char *argv[]) {
 
   {
     HSSOptions<scalar_t> opts;
-    opts.set_verbose(true);
+    opts.set_verbose(false);
     opts.set_from_command_line(argc, argv);
-    if (c.is_root()) opts.describe_options();
+    if (c.is_root() && opts.verbose())
+      opts.describe_options();
 
     BLACSGrid g(c);
     auto weights = K->fit_HSS(g, train_labels, opts);
@@ -152,6 +157,10 @@ int main(int argc, char *argv[]) {
     check(prediction);
   }
 #endif
+
+  if (c.is_root())
+    std::cout << "# total_time: "
+      << timer_all.elapsed() << std::endl << std::endl;
 
   MPI_Finalize();
   return 0;

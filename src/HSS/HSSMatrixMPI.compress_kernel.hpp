@@ -28,6 +28,7 @@
 #ifndef HSS_MATRIX_MPI_COMPRESS_KERNEL_HPP
 #define HSS_MATRIX_MPI_COMPRESS_KERNEL_HPP
 
+#include <string>
 #include "misc/RandomWrapper.hpp"
 #include "DistSamples.hpp"
 #include "DistElemMult.hpp"
@@ -39,17 +40,43 @@ namespace strumpack {
     template<typename scalar_t> void HSSMatrixMPI<scalar_t>::compress
     (const kernel::Kernel<scalar_t>& K, const opts_t& opts) {
       TIMER_TIME(TaskType::HSS_COMPRESS, 0, t_compress);
-      DenseMatrix<std::uint32_t> ann;
-      DenseMatrix<real_t> scores;
       std::mt19937 gen(1); // reproducible
-      TaskTimer timer("approximate_neighbors");
-      timer.start();
-      find_approximate_neighbors
-        (K.data(), opts.ann_iterations(),
-         opts.approximate_neighbors(), ann, scores, gen);
-      if (opts.verbose() && Comm().is_root())
-        std::cout << "# approximate neighbor search time = "
-                  << timer.elapsed() << std::endl;
+      DenseMatrix<std::uint32_t> ann;
+      DenseMatrix<scalar_t> scores;
+      TaskTimer timer_ann("approximate_neighbors");
+      TaskTimer timer_compresion("compression");
+
+      int kann = opts.approximate_neighbors();
+      int n = K.n();
+      std::string folder = "/Users/gichavez/Documents/mats/SUSY/susy_d8_1K_1K";
+      std::string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
+      std::string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
+      if (Comm().is_root()){
+        std::cout << "ann:" << ann_filename << std::endl;
+        std::cout << "scores:" << scores_filename << std::endl;
+      }
+      if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+        fclose(file);
+        if (Comm().is_root())
+          std::cout << "Found ANN matrices files, reading" << std::endl;
+        ann.resize(kann,n);
+        scores.resize(kann,n);
+        ann.read_from_binary_file(ann_filename);
+        scores.read_from_binary_file(scores_filename);
+      } else {
+        if (Comm().is_root())
+          std::cout << std::endl << "Computing ANN..." << std::endl;
+        timer_ann.start();
+        find_approximate_neighbors(K.data(), opts.ann_iterations(),
+          kann, ann, scores, gen);
+        std::cout << "## k-ANN = " << kann
+        << " approximate neighbor search time = "
+        << timer_ann.elapsed() << std::endl;
+        std::cout << "Saving ANN matrices to file" << std::endl;
+        ann.print_to_binary_file(ann_filename);
+        scores.print_to_binary_file(scores_filename);
+      }
+
       auto Aelemw = [&]
         (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
          DistM_t& B, const DistM_t& A, std::size_t rlo, std::size_t clo,
@@ -67,7 +94,11 @@ namespace strumpack {
         K(lI, lJ, lB);
       };
       WorkCompressMPIANN<scalar_t> w;
+      timer_compresion.start();
       compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());
+      if (Comm().is_root())
+        std::cout << "## HSS_compression_time = "
+          << timer_compresion.elapsed() << std::endl;
     }
 
     template<typename scalar_t> void
