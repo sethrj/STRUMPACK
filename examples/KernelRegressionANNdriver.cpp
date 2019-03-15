@@ -60,7 +60,7 @@ read_from_file(string filename) {
 int main(int argc, char *argv[]) {
   TaskTimer timer("compressions");
   string filename("smalltest.dat");
-  string folder("~");
+  string folder(".");
   size_t d = 2;
   scalar_t h = 3.;
   scalar_t lambda = 1.;
@@ -119,43 +119,43 @@ int main(int argc, char *argv[]) {
   // cout << "## Elapsed: " << timer.elapsed() << std::endl;
 
   std::mt19937 gen(1);
-  DenseMatrix<std::uint32_t> ann;
-  DenseMatrix<scalar_t> scores;
-
-  timer.start();
-  std::cout << std::endl << "Computing ANN..." << std::endl;
-
   int kann = hss_opts.approximate_neighbors();
-  find_approximate_neighbors(K->data(), hss_opts.ann_iterations(),
-    kann, ann, scores, gen);
-
-  std::cout << "## k-ANN = " << kann
-  << " approximate neighbor search time = "
-  << timer.elapsed() << std::endl;
-
-  std::cout << "Saving ANN matrices to file" << std::endl;
-  // folder = "/Users/gichavez/Documents/github/code_pap3_tests/ANNdriver_saveANN_to_file";
 
   string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"
                         +std::to_string(n)+".binmatrix";
   string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"
                         +std::to_string(n)+".binmatrix";
 
-  // Saving ANN indices and scores
-  ann.print_to_binary_file(ann_filename);
-  scores.print_to_binary_file(scores_filename);
+  if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+    fclose(file);
+    DenseMatrix<std::uint32_t> ann(kann,n);
+    DenseMatrix<scalar_t> scores(kann,n);
+    std::cout << std::endl << "Found ANN matrices files, reading" << std::endl;
+    ann.read_from_binary_file(ann_filename);
+    scores.read_from_binary_file(scores_filename);
+    ann.print("ann_read");
+    scores.print("scores_read");
+  } else {
+    DenseMatrix<std::uint32_t> ann;
+    DenseMatrix<scalar_t> scores;
+    timer.start();
+    std::cout << std::endl << "Computing ANN..." << std::endl;
+    find_approximate_neighbors(K->data(), hss_opts.ann_iterations(),
+      kann, ann, scores, gen);
+    std::cout << "## k-ANN = " << kann
+    << " approximate neighbor search time = "
+    << timer.elapsed() << std::endl;
+    std::cout << "Saving ANN matrices to file" << std::endl;
+    ann.print_to_binary_file(ann_filename);
+    scores.print_to_binary_file(scores_filename);
+  }
 
   // Check writing and reading
   // ann.zero();
   // scores.zero();
-
   // ann.read_from_binary_file(ann_filename);
   // scores.read_from_binary_file(scores_filename);
-
   // ann.print("ann_read",true);
   // scores.print("scores_read",true);
-
   return 0;
 }
-
-
