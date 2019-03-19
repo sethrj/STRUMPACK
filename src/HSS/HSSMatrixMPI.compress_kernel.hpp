@@ -58,23 +58,32 @@ namespace strumpack {
       if (FILE *file = fopen(ann_filename.c_str(), "r")) {
         fclose(file);
         if (Comm().is_root())
-          std::cout << "Found ANN matrices files, reading" << std::endl;
+          std::cout << "Found ANN matrices files, all reading" << std::endl;
         ann.resize(kann,n);
         scores.resize(kann,n);
         ann.read_from_binary_file(ann_filename);
         scores.read_from_binary_file(scores_filename);
       } else {
         if (Comm().is_root())
-          std::cout << std::endl << "Computing ANN..." << std::endl;
+          std::cout << std::endl << "All computing ANN..." << std::endl;
         timer_ann.start();
         find_approximate_neighbors(K.data(), opts.ann_iterations(),
           kann, ann, scores, gen);
-        std::cout << "## k-ANN = " << kann
-        << " approximate neighbor search time = "
-        << timer_ann.elapsed() << std::endl;
-        std::cout << "Saving ANN matrices to file" << std::endl;
-        ann.print_to_binary_file(ann_filename);
-        scores.print_to_binary_file(scores_filename);
+        if (Comm().is_root()){
+          std::cout << "## k-ANN = " << kann
+          << " approximate neighbor search time = "
+          << timer_ann.elapsed() << std::endl;
+            std::cout << "Saving ANN matrices to file..." << std::endl;
+          ann.print_to_binary_file(ann_filename);
+          scores.print_to_binary_file(scores_filename);
+          // Check file was saved
+          if (FILE *file = fopen(ann_filename.c_str(), "r")){
+            std::cout << "# Matrices saved succesfully" << std::endl;
+            fclose(file);
+          }
+          else
+            std::cout << "# Error saving matrices!" << std::endl;
+        }
       }
 
       auto Aelemw = [&]
