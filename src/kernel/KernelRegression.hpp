@@ -238,7 +238,7 @@ namespace strumpack {
                       << " with " << lvls << " levels" << std::endl
                       << "# compression succeeded!" << std::endl;
           else std::cout << "# compression failed!!!" << std::endl;
-          std::cout << "# rank(H) = " << rank << std::endl
+          std::cout << "# rank_H = " << rank << std::endl
                     << "# HSS memory(H) = " << mem / 1e6
                     << " MB " << std::endl << std::endl
                     << "# factorization start" << std::endl;

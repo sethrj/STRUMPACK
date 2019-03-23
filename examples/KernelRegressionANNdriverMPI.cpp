@@ -39,7 +39,8 @@
 #include "dense/DenseMatrix.hpp"
 #include "sparse/GMRes.hpp"
 #include "sparse/BiCGStab.hpp"
-#include "clustering/NeighborSearch.hpp"
+// #include "clustering/NeighborSearch.hpp"
+#include "clustering/NeighborSearch_MPI.hpp"
 #include "StrumpackOptions.hpp"
 
 using namespace std;
@@ -65,9 +66,8 @@ read_from_file(string filename) {
 
 int main(int argc, char *argv[]) {
   using scalar_t = double;
-
-  TaskTimer timer_all("all");
-  timer_all.start();
+  // TaskTimer timer_all("all");
+  // timer_all.start();
   MPI_Init(&argc, &argv);
   MPIComm c;
 
@@ -131,20 +131,29 @@ int main(int argc, char *argv[]) {
   DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d);
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
 
+  // Testing divider
+  // int_t number_leafs = 11;
+  // //    std::vector<int_t> getRange(int_t n, int_t p, int_t rank) {
+  // std::vector<int_t> res = getRange(number_leafs, c.size(), c.rank());
+  // std::cout << "rank(" << c.rank() << ") [" << res[1] - res[0] << "] "
+  //           << res[0] << "-" << res[1] << std::endl;
+  // MPI_Finalize();
+  // return 0;
+
   // Compute kann
   std::mt19937 gen(1);
   int kann = hss_opts.approximate_neighbors();
 
-  string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"
-                        +std::to_string(n)+".binmatrix";
-  string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"
-                        +std::to_string(n)+".binmatrix";
+  // string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"
+  //                       +std::to_string(n)+".binmatrix";
+  // string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"
+  //                       +std::to_string(n)+".binmatrix";
 
   if (c.is_root()){
     std::cout << std::endl;
-    std::cout << "ann_filename: " << ann_filename << std::endl;
-    std::cout << "scores_filename: " << scores_filename << std::endl;
-    std::cout << std::endl;
+  //   std::cout << "ann_filename: " << ann_filename << std::endl;
+  //   std::cout << "scores_filename: " << scores_filename << std::endl;
+  //   std::cout << std::endl;
   }
 
   // if (FILE *file = fopen(ann_filename.c_str(), "r")) {
@@ -157,23 +166,26 @@ int main(int argc, char *argv[]) {
   //   ann.print("ann_read");
   //   scores.print("scores_read");
   // } else {
-  //   DenseMatrix<std::uint32_t> ann;
-  //   DenseMatrix<scalar_t> scores;
-  //   timer.start();
-  //   std::cout << std::endl << "Computing ANN..." << std::endl;
-  //   find_approximate_neighbors(K->data(), hss_opts.ann_iterations(),
-  //     kann, ann, scores, gen);
-  //   std::cout << "## k-ANN = " << kann
-  //   << " approximate neighbor search time = "
-  //   << timer.elapsed() << std::endl;
+    DenseMatrix<std::uint32_t> ann;
+    DenseMatrix<scalar_t> scores;
+    timer.start();
+
+    find_approximate_neighbors_MPI(K->data(), hss_opts.ann_iterations(),
+      kann, ann, scores, gen, c);
+    c.barrier();
+    if (c.is_root())
+      std::cout << "## k-ANN = " << kann
+      << " approximate neighbor search time = "
+      << timer.elapsed() << std::endl;
+
   //   std::cout << "Saving ANN matrices to file" << std::endl;
   //   ann.print_to_binary_file(ann_filename);
   //   scores.print_to_binary_file(scores_filename);
   // }
 
-  if (c.is_root())
-    std::cout << "# total_time: "
-      << timer_all.elapsed() << std::endl << std::endl;
+  // if (c.is_root())
+  //   std::cout << std::endl << "# total_time: "
+  //     << timer_all.elapsed() << std::endl << std::endl;
 
   MPI_Finalize();
   return 0;

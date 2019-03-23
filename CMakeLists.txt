@@ -451,6 +451,7 @@ install(FILES
 
 install(FILES
   src/clustering/NeighborSearch.hpp
+  src/clustering/NeighborSearch_MPI.hpp
   src/clustering/Clustering.hpp
   src/clustering/KMeans.hpp
   src/clustering/KDTree.hpp

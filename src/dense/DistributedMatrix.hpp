@@ -833,7 +833,7 @@ namespace strumpack {
   DistributedMatrix<scalar_t>::print(std::string name, int precision) const {
     if (!active()) return;
     auto tmp = gather();
-    if (is_master()) tmp.print(name);
+    if (is_master()) tmp.print(name, true, precision);
   }
 
   template<typename scalar_t> void

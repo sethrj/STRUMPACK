@@ -120,22 +120,23 @@ int main(int argc, char *argv[]) {
 
   std::mt19937 gen(1);
   int kann = hss_opts.approximate_neighbors();
+  cout << "# kann             = " << kann << std::endl;
 
-  string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"
-                        +std::to_string(n)+".binmatrix";
-  string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"
-                        +std::to_string(n)+".binmatrix";
+  // string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"
+  //                       +std::to_string(n)+".binmatrix";
+  // string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"
+  //                       +std::to_string(n)+".binmatrix";
 
-  if (FILE *file = fopen(ann_filename.c_str(), "r")) {
-    fclose(file);
-    DenseMatrix<std::uint32_t> ann(kann,n);
-    DenseMatrix<scalar_t> scores(kann,n);
-    std::cout << std::endl << "Found ANN matrices files, reading" << std::endl;
-    ann.read_from_binary_file(ann_filename);
-    scores.read_from_binary_file(scores_filename);
-    ann.print("ann_read",true);
-    scores.print("scores_read",true);
-  } else {
+  // if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+  //   fclose(file);
+  //   DenseMatrix<std::uint32_t> ann(kann,n);
+  //   DenseMatrix<scalar_t> scores(kann,n);
+  //   std::cout << std::endl << "Found ANN matrices files, reading" << std::endl;
+  //   ann.read_from_binary_file(ann_filename);
+  //   scores.read_from_binary_file(scores_filename);
+  //   ann.print("ann_read",true);
+  //   scores.print("scores_read",true);
+  // } else {
     DenseMatrix<std::uint32_t> ann;
     DenseMatrix<scalar_t> scores;
     timer.start();
@@ -145,10 +146,10 @@ int main(int argc, char *argv[]) {
     std::cout << "## k-ANN = " << kann
     << " approximate neighbor search time = "
     << timer.elapsed() << std::endl;
-    std::cout << "Saving ANN matrices to file" << std::endl;
-    ann.print_to_binary_file(ann_filename);
-    scores.print_to_binary_file(scores_filename);
-  }
+  //   std::cout << "Saving ANN matrices to file" << std::endl;
+  //   ann.print_to_binary_file(ann_filename);
+  //   scores.print_to_binary_file(scores_filename);
+  // }
 
   // Check writing and reading
   // ann.zero();
