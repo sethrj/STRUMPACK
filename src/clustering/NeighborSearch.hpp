@@ -339,7 +339,7 @@ namespace strumpack {
       choose_best_neighbors(neighbors, scores, new_neighbors, new_scores);
       quality = check_quality(data, neighbors, generator);
     }
-    std::cout << "# ANN search quality = " << quality
+    std::cout << "# ANN " << ann_number << " search quality = " << quality
               << " after " << iter << " iterations" << std::endl;
   }
 

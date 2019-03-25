@@ -40,74 +40,88 @@ namespace strumpack {
     template<typename scalar_t> void HSSMatrixMPI<scalar_t>::compress
     (const kernel::Kernel<scalar_t>& K, const opts_t& opts) {
       TIMER_TIME(TaskType::HSS_COMPRESS, 0, t_compress);
-      std::mt19937 gen(1); // reproducible
-      DenseMatrix<std::uint32_t> ann;
-      DenseMatrix<scalar_t> scores;
       TaskTimer timer_ann("approximate_neighbors");
       TaskTimer timer_compresion("compression");
-
-      int kann = opts.approximate_neighbors();
+      std::mt19937 gen(1); // reproducible
+      int kann = std::min(int(K.n()), opts.approximate_neighbors());
       int n = K.n();
-      std::string folder = "/Users/gichavez/Documents/mats/SUSY/susy_d8_1K_1K";
-      std::string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
-      std::string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
-      if (Comm().is_root()){
-        std::cout << "ann:" << ann_filename << std::endl;
-        std::cout << "scores:" << scores_filename << std::endl;
-      }
-      if (FILE *file = fopen(ann_filename.c_str(), "r")) {
-        fclose(file);
+
+      // std::string folder = "/Users/gichavez/Documents/mats/SUSY/susy_d8_1K_1K";
+      // std::string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
+      // std::string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
+      // if (Comm().is_root()){
+      //   std::cout << "ann:" << ann_filename << std::endl;
+      //   std::cout << "scores:" << scores_filename << std::endl;
+      // }
+      // if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+      //   fclose(file);
+      //   if (Comm().is_root())
+      //     std::cout << "Found ANN matrices files, all reading" << std::endl;
+      //   ann.resize(kann,n);
+      //   scores.resize(kann,n);
+      //   ann.read_from_binary_file(ann_filename);
+      //   scores.read_from_binary_file(scores_filename);
+      // } else {
+      //   if (Comm().is_root())
+      //     std::cout << std::endl << "Computing ANN..." << std::endl;
+      //   timer_ann.start();
+      //   find_approximate_neighbors(K.data(), opts.ann_iterations(),
+      //     kann, ann, scores, gen);
+      //   if (Comm().is_root()){
+      //     std::cout << "## k-ANN = " << kann
+      //     << " approximate neighbor search time = "
+      //     << timer_ann.elapsed() << std::endl;
+      //       std::cout << "Saving ANN matrices to file..." << std::endl;
+      //     ann.print_to_binary_file(ann_filename);
+      //     scores.print_to_binary_file(scores_filename);
+      //     // Check file was saved
+      //     if (FILE *file = fopen(ann_filename.c_str(), "r")){
+      //       std::cout << "# Matrices saved succesfully" << std::endl;
+      //       fclose(file);
+      //     }
+      //     else
+      //       std::cout << "# Error saving matrices!" << std::endl;
+      //   }
+      // }
+
+      timer_compresion.start();
+      while (!this->is_compressed()) {
+        DenseMatrix<std::uint32_t> ann;
+        DenseMatrix<scalar_t> scores;
         if (Comm().is_root())
-          std::cout << "Found ANN matrices files, all reading" << std::endl;
-        ann.resize(kann,n);
-        scores.resize(kann,n);
-        ann.read_from_binary_file(ann_filename);
-        scores.read_from_binary_file(scores_filename);
-      } else {
-        if (Comm().is_root())
-          std::cout << std::endl << "All computing ANN..." << std::endl;
+          std::cout << std::endl << "Computing ANN..." << std::endl;
         timer_ann.start();
         find_approximate_neighbors(K.data(), opts.ann_iterations(),
           kann, ann, scores, gen);
-        if (Comm().is_root()){
+        if (Comm().is_root())
           std::cout << "## k-ANN = " << kann
-          << " approximate neighbor search time = "
-          << timer_ann.elapsed() << std::endl;
-            std::cout << "Saving ANN matrices to file..." << std::endl;
-          ann.print_to_binary_file(ann_filename);
-          scores.print_to_binary_file(scores_filename);
-          // Check file was saved
-          if (FILE *file = fopen(ann_filename.c_str(), "r")){
-            std::cout << "# Matrices saved succesfully" << std::endl;
-            fclose(file);
-          }
-          else
-            std::cout << "# Error saving matrices!" << std::endl;
-        }
+                    << " approximate neighbor search time = "
+                    << timer_ann.elapsed() << std::endl;
+        auto Aelemw = [&]
+          (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
+          DistM_t& B, const DistM_t& A, std::size_t rlo, std::size_t clo,
+          MPI_Comm comm) {
+          std::vector<std::size_t> lI, lJ;
+          lI.reserve(B.lrows());
+          lJ.reserve(B.lcols());
+          for (size_t j=0; j<J.size(); j++)
+            if (B.colg2p(j) == B.pcol())
+              lJ.push_back(J[j]);
+          for (size_t i=0; i<I.size(); i++)
+            if (B.rowg2p(i) == B.prow())
+              lI.push_back(I[i]);
+          auto lB = B.dense_wrapper();
+          K(lI, lJ, lB);
+        };
+        WorkCompressMPIANN<scalar_t> w;
+
+        compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());
+        kann = std::min(2*kann, int(K.n()));
       }
 
-      auto Aelemw = [&]
-        (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
-         DistM_t& B, const DistM_t& A, std::size_t rlo, std::size_t clo,
-         MPI_Comm comm) {
-        std::vector<std::size_t> lI, lJ;
-        lI.reserve(B.lrows());
-        lJ.reserve(B.lcols());
-        for (size_t j=0; j<J.size(); j++)
-          if (B.colg2p(j) == B.pcol())
-            lJ.push_back(J[j]);
-        for (size_t i=0; i<I.size(); i++)
-          if (B.rowg2p(i) == B.prow())
-            lI.push_back(I[i]);
-        auto lB = B.dense_wrapper();
-        K(lI, lJ, lB);
-      };
-      WorkCompressMPIANN<scalar_t> w;
-      timer_compresion.start();
-      compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());
-      if (Comm().is_root())
-        std::cout << "## HSS_compression_time = "
-          << timer_compresion.elapsed() << std::endl;
+    if (Comm().is_root())
+      std::cout << "## HSS_compression_time = "
+                << timer_compresion.elapsed() << std::endl;
     }
 
     template<typename scalar_t> void
@@ -136,7 +150,8 @@ namespace strumpack {
           (ann, scores, Aelem, w.c[1], opts, lg);
         communicate_child_data_ann(w);
         if (!this->_ch[0]->is_compressed() ||
-            !this->_ch[1]->is_compressed()) return;
+            !this->_ch[1]->is_compressed())
+          return;
         if (this->is_untouched()) {
           _B01 = DistM_t(grid(), w.c[0].Ir.size(), w.c[1].Ic.size());
           Aelem(w.c[0].Ir, w.c[1].Ic, _B01, _A01, 0, 0, comm());
@@ -147,8 +162,8 @@ namespace strumpack {
         this->_U_state = this->_V_state = State::COMPRESSED;
       else {
         compute_local_samples_ann(ann, scores, w, Aelem, opts);
-        compute_U_V_bases_ann(w.S, opts, w);
-        this->_U_state = this->_V_state = State::COMPRESSED;
+        if(compute_U_V_bases_ann(w.S, opts, w))
+          this->_U_state = this->_V_state = State::COMPRESSED;
         w.c.clear();
       }
     }
@@ -234,6 +249,7 @@ namespace strumpack {
       auto gT = grid()->transpose();
       DistM_t wSr(S);
       wSr.ID_row(_U.E(), _U.P(), w.Jr, rtol, atol, opts.max_rank(), &gT);
+      // exploit symmetry, set V = U
       _V.E() = _U.E();
       _V.P() = _U.P();
       w.Jc = w.Jr;
@@ -242,13 +258,13 @@ namespace strumpack {
       notify_inactives_J(w);
       bool accurate = true;
       int d = S.cols();
-      if (!(d - opts.p() >= opts.max_rank() ||
-            (int(w.Jr.size()) <= d - opts.p() &&
-             int(w.Jc.size()) <= d - opts.p()))) {
-        accurate = false;
-        std::cout << "WARNING: ID did not reach required accuracy:"
-                  << "\t increase k (number of ANN's), or Delta_d."
-                  << std::endl;
+      if (!(d >= this->cols() || d >= opts.max_rank() ||
+          (int(_U.cols()) + opts.p() < d  &&
+           int(_V.cols()) + opts.p() < d))) {
+        // std::cout << "WARNING: ID did not reach required accuracy:"
+        //           << "\t increase k (number of ANN's), or Delta_d."
+        //           << std::endl;
+        return false;
       }
       this->_U_rank = w.Jr.size();  this->_U_rows = S.rows();
       this->_V_rank = w.Jc.size();  this->_V_rows = S.rows();
@@ -266,7 +282,7 @@ namespace strumpack {
           w.Ic.push_back((j < r0) ? w.c[0].Ic[j] : w.c[1].Ic[j-r0]);
       }
       // TODO clear w.c[0].Ir, w.c[1].Ir, w.c[0].Ic, w.c[1].Ic
-      return accurate;
+      return true;
     }
 
     template<typename scalar_t> void

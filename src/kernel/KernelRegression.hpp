@@ -81,7 +81,7 @@ namespace strumpack {
                   << "# factorization start" << std::endl;
       }
       // Computing error against dense matrix
-      if ( n()<= 500){
+      if ( n()<= 1000 ){
         DenseM_t Kdense(n(),n());
         for(int j = 0; j < n(); j++){
           for(int i = 0; i < n(); i++){
@@ -90,7 +90,7 @@ namespace strumpack {
         }
         auto HSSd = H.dense();
         HSSd.scaled_add(-1., Kdense);
-        std::cout << "# Compression relative error = ||HSSd-Hd||_F/||Hd||_F = " <<
+        std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
         HSSd.normF() / Kdense.normF() << std::endl;
       }
       timer.start();
@@ -243,6 +243,21 @@ namespace strumpack {
                     << " MB " << std::endl << std::endl
                     << "# factorization start" << std::endl;
         }
+      }
+      // Computing error against dense matrix
+      if ( n()<= 1000 ){
+        DenseM_t Kdense(n(),n());
+        for(int j = 0; j < n(); j++){
+          for(int i = 0; i < n(); i++){
+            Kdense(i,j) = eval(i,j);
+          }
+        }
+        auto HSSd_dist = H.dense();
+        auto HSSd = HSSd_dist.all_gather();
+        HSSd.scaled_add(-1., Kdense);
+        if (c.is_root())
+          std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
+          HSSd.normF() / Kdense.normF() << std::endl;
       }
       timer.start();
       auto ULV = H.factor();

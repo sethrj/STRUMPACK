@@ -45,6 +45,7 @@ namespace strumpack {
       };
       int ann_number = std::min(int(K.n()), opts.approximate_neighbors());
       std::mt19937 gen(1); // reproducible
+      // Adaptive ANN
       while (!this->is_compressed()) {
         DenseMatrix<std::uint32_t> ann;
         DenseMatrix<real_t> scores;
