@@ -255,6 +255,17 @@ namespace strumpack {
       }
 
       /**
+       * Set the folder path of the scratch folder. Intermediate Kernel and ANN
+       * computations will be stored there to accelerate future runs with the
+       * same dataset and/or configuration.
+       *
+       * \param folder to be used as scratch
+       */
+      void set_scratch_folder(std::string folder) {
+        _scratch_folder = folder;
+      }
+
+      /**
        * Set this to true if you want to manually fill the random
        * sample vectors with random values.
        */
@@ -399,6 +410,15 @@ namespace strumpack {
       }
 
       /**
+       * Get scratch folder path
+       *
+       * \return Scratch folder path
+       */
+      std::string scratch_folder() const {
+        return _scratch_folder;
+      }
+
+      /**
        * Will the user define its own random matrices?
        *
        * \return True if the user will fill up the random matrices,
@@ -467,6 +487,7 @@ namespace strumpack {
           {"hss_enable_sync",           no_argument, 0, 15},
           {"hss_disable_sync",          no_argument, 0, 16},
           {"hss_log_ranks",             no_argument, 0, 17},
+          {"hss_scratch_folder",        required_argument, 0, 18},
           {"hss_verbose",               no_argument, 0, 'v'},
           {"hss_quiet",                 no_argument, 0, 'q'},
           {"help",                      no_argument, 0, 'h'},
@@ -566,6 +587,11 @@ namespace strumpack {
           case 15: { set_synchronized_compression(true); } break;
           case 16: { set_synchronized_compression(false); } break;
           case 17: { set_log_ranks(true); } break;
+          case 18: {
+            std::istringstream iss(optarg);
+            iss >> _scratch_folder;
+            set_scratch_folder(_scratch_folder);
+          } break;
           case 'v': set_verbose(true); break;
           case 'q': set_verbose(false); break;
           case 'h': describe_options(); break;
@@ -605,6 +631,8 @@ namespace strumpack {
                   << approximate_neighbors() << ")" << std::endl
                   << "#   --hss_ann_iterations int (default "
                   << ann_iterations() << ")" << std::endl
+                  << "#   --hss_scratch_folder string (default "
+                  << scratch_folder() << ")" << std::endl
                   << "#   --hss_enable_sync (default "
                   << synchronized_compression() << ")" << std::endl
                   << "#   --hss_disable_sync (default "
@@ -637,6 +665,7 @@ namespace strumpack {
       ClusteringAlgorithm _clustering_algo = ClusteringAlgorithm::TWO_MEANS;
       int _approximate_neighbors = 64;
       int _ann_iterations = 5;
+      std::string _scratch_folder = "./";
       bool _verbose = true;
     };
 
