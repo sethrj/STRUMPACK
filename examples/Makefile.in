@@ -1,4 +1,5 @@
-all: KernelRegressionANNdriverMPI KernelRegressionANNdriver
+all: KernelRegression KernelRegressionMPI \
+  KernelRegressionANNdriverMPI KernelRegressionANNdriver
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@

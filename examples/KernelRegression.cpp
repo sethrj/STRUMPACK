@@ -92,6 +92,7 @@ int main(int argc, char *argv[]) {
     hss_opts.describe_options();
   TaskTimer timer("compression");
 
+  cout << "folder is " << hss_opts.scratch_folder() << endl;
   cout << "# Reading data ..." << endl;
   timer.start();
   // Read from csv files

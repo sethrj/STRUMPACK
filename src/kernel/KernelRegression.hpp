@@ -49,6 +49,8 @@
 #define ITERATIVE_REFINEMENT 0
 #define DIRECT_SOLVE 1
 
+extern std::size_t memory_counter;
+
 namespace strumpack {
 
   namespace kernel {
@@ -68,7 +70,7 @@ namespace strumpack {
       B.lapmt(perm, true);
       perm.clear();
       if (opts.verbose()) {
-        // draw(H,"plot_");
+        draw(H,"plot_");
         if (H.is_compressed())
           std::cout << "# created HSS matrix of dimension "
                     << H.rows() << " x " << H.cols()
@@ -76,8 +78,10 @@ namespace strumpack {
                     << "# compression succeeded!" << std::endl;
         else std::cout << "# compression failed!!!" << std::endl;
         std::cout << "# rank_H = " << H.rank() << std::endl
-                  << "# HSS memory(H) = "
-                  << H.memory() / 1e6 << " MB" << std::endl << std::endl
+                  << "# HSS memory_H = "
+                  << H.memory() / 1e6 << " MB" << std::endl
+                  << "# HSS memory_counter_H = "
+                  << memory_counter / 1e6 << " MB" << std::endl << std::endl
                   << "# factorization start" << std::endl;
       }
       // Computing error against dense matrix
