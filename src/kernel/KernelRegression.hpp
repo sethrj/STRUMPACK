@@ -70,7 +70,7 @@ namespace strumpack {
       B.lapmt(perm, true);
       perm.clear();
       if (opts.verbose()) {
-        draw(H,"plot_");
+        // draw(H,"plot_");
         if (H.is_compressed())
           std::cout << "# created HSS matrix of dimension "
                     << H.rows() << " x " << H.cols()

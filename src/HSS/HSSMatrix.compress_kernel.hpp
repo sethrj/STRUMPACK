@@ -37,11 +37,12 @@ std::size_t memory_counter = 0;
 namespace strumpack {
   namespace HSS {
 
-    std::size_t print_count_memory(std::string desc, std::size_t m, std::size_t n,
+    void print_count_memory(std::string desc, std::size_t m, std::size_t n,
                       std::size_t bytes){
       std::size_t memory = m*n*bytes;
       memory_counter += memory;
-      std::cout << "Total_cummulative_mb = " << memory_counter/1e6 << " |" <<desc << "[" << m << "," << n << "] = "
+      std::cout << "Total_cummulative_mb = " << memory_counter/1e6 << " |"
+                << desc << "[" << m << "," << n << "] = "
                 << memory << std::endl;
     }
 
