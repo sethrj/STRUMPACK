@@ -113,6 +113,7 @@ int main(int argc, char *argv[]) {
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
 
   auto weights = K->fit_HSS(train_labels, hss_opts);
+  return 0;
 
   cout << endl << "# prediction start..." << endl;
   timer.start();

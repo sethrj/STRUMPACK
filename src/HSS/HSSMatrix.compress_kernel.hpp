@@ -41,7 +41,7 @@ namespace strumpack {
                       std::size_t bytes){
       std::size_t memory = m*n*bytes;
       memory_counter += memory;
-      std::cout << "Total_cummulative_mb = " << memory_counter/1e6 << " |"
+      std::cout << "CummMemoryMB> " << memory_counter/1e6 << " >CummMemory "
                 << desc << "[" << m << "," << n << "] = "
                 << memory << std::endl;
     }
@@ -92,7 +92,7 @@ namespace strumpack {
           for (std::size_t j=0; j<this->cols(); j++)
             J.push_back(j+w.offset.second);
           _D = DenseM_t(this->rows(), this->cols());
-          print_count_memory("leaf_D_compress_recursive", _D.rows(), _D.cols(), sizeof(real_t)); //good
+          print_count_memory("leafD", _D.rows(), _D.cols(), sizeof(real_t)); //good
           Aelem(I, J, _D);
         }
       } else {
@@ -123,7 +123,7 @@ namespace strumpack {
         Aelem(w.c[0].Ir, w.c[1].Ic, _B01);
         _B10 = _B01.transpose();
         //}
-        print_count_memory("nonLeaf_B10_and_B01", this->_ch[0]->U_rank(),
+        print_count_memory("transferMats", this->_ch[0]->U_rank(),
                                             this->_ch[1]->V_rank(),
                                             2*sizeof(real_t)); //good
       }
@@ -288,8 +288,8 @@ namespace strumpack {
       if (this->leaf()) {
         for (auto i : w.Jr) w.Ir.push_back(w.offset.first + i);
         for (auto j : w.Jc) w.Ic.push_back(w.offset.second + j);
-        print_count_memory("leaf_basis_U", _U.rows()-_U.cols(), _U.cols(), sizeof(real_t)); //good
-        print_count_memory("leaf_basis_V", _V.rows()-_V.cols(), _V.cols(), sizeof(real_t)); //good
+        print_count_memory("leafbasisU", _U.rows()-_U.cols(), _U.cols(), sizeof(real_t)); //good
+        print_count_memory("leafbasisV", _V.rows()-_V.cols(), _V.cols(), sizeof(real_t)); //good
       } else {
         auto r0 = w.c[0].Ir.size();
         for (auto i : w.Jr)
@@ -297,8 +297,8 @@ namespace strumpack {
         r0 = w.c[0].Ic.size();
         for (auto j : w.Jc)
           w.Ic.push_back((j < r0) ? w.c[0].Ic[j] : w.c[1].Ic[j-r0]);
-        print_count_memory("non_leaf_basis_U", _U.rows()-_U.cols(), _U.cols(), sizeof(real_t)); //good
-        print_count_memory("non_leaf_basis_V", _V.rows()-_V.cols(), _V.cols(), sizeof(real_t)); //good
+        print_count_memory("nonleafbasisU", _U.rows()-_U.cols(), _U.cols(), sizeof(real_t)); //good
+        print_count_memory("nonleafbasisV", _V.rows()-_V.cols(), _V.cols(), sizeof(real_t)); //good
       }
       return true;
     }
