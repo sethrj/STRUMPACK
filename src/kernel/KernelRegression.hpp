@@ -50,6 +50,7 @@
 #define DIRECT_SOLVE 1
 
 extern std::size_t memory_counter;
+extern std::size_t peak_dense_mem;
 
 namespace strumpack {
 
@@ -63,7 +64,9 @@ namespace strumpack {
         std::cout << "# starting HSS compression..." << std::endl;
       std::vector<int> perm;
       timer.start();
+      // std::cout << std::endl << "###############" << std::endl;
       HSS::HSSMatrix<scalar_t> H(*this, perm, opts);
+      // std::cout << std::endl << "###############" << std::endl;
       std::cout << "## HSS_compression_time = "
                 << timer.elapsed() << std::endl;
       DenseMW_t B(1, n(), labels.data(), 1);
@@ -81,9 +84,9 @@ namespace strumpack {
                   << "# HSS memory_H = "
                   << H.memory() / 1e6 << " MB" << std::endl
                   << "# HSS memory_counter_H = "
-                  << memory_counter / 1e6 << " MB" << std::endl << std::endl
-                  << "# factorization start" << std::endl;
+                  << memory_counter / 1e6 << " MB" << std::endl << std::endl;
       }
+
       // Computing error against dense matrix
       if ( n()<= 1000 ){
         DenseM_t Kdense(n(),n());
@@ -97,106 +100,120 @@ namespace strumpack {
         std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
         HSSd.normF() / Kdense.normF() << std::endl;
       }
+      std::cout << "peak_dense_mem AFTER_COMP MB= "
+                << peak_dense_mem/1.e6 << std::endl;
+
+
+      std::cout << "# factorization start" << std::endl;
       timer.start();
       auto ULV = H.factor();
       if (opts.verbose())
         std::cout << "# factorization time = "
-                  << timer.elapsed() << std::endl
-                  << "# solution start..." << std::endl;
-#if ITERATIVE_REFINEMENT == 1
-      DenseMW_t rhs(n(), 1, labels.data(), n());
-      DenseM_t weights(rhs), residual(n(), 1);
-      H.solve(ULV, weights);
-      auto rhs_normF = rhs.normF();
-      using real_t = typename RealType<scalar_t>::value_type;
-      for (int ref=0; ref<3; ref++) {
-        auto residual = H.apply(weights);
-        residual.scaled_add(scalar_t(-1.), rhs);
-        auto rres = residual.normF() / rhs_normF;
-        if (opts.verbose())
-          std::cout << "||H*weights - labels||_2/||labels||_2 = "
-                    << rres << std::endl;
-        if (rres < 10*blas::lamch<real_t>('E')) break;
-        H.solve(ULV, residual);
-        weights.scaled_add(scalar_t(-1.), residual);
-      }
-#else // no iterative refinement
-    DenseM_t weights(n(), 1, labels.data(), n());
-    #if DIRECT_SOLVE == 1
-      H.solve(ULV, weights);
-    #else
-      const DenseMatrix<scalar_t> z_gmres(weights); // copy to pass to GMRES (x)
-      DenseMatrix<scalar_t> weights_gmres(weights); // copy to pass to GMRES (b)
-      auto Kdense = // Needs the original dense kernel matrix
+                  << timer.elapsed() << std::endl;
 
-      // Lambda spmv
-      std::function<void(const scalar_t*, scalar_t*)>
-      spmv = [&](const scalar_t* x, scalar_t* b) {
-        auto cdmw_x = ConstDenseMatrixWrapperPtr<scalar_t> (n(), size_t(1), x, n());
-        DenseMatrixWrapper<scalar_t> dmw_b(n(), size_t(1), b, n());
-        // Operation: b = KMM*x
-        gemv(
-          Trans::N,
-          scalar_t(1.0),
-          Kdense,          // DenseMatrix
-          *cdmw_x,            // ConstDenseMatrixWrapperPtr
-          scalar_t(0.0),
-          dmw_b,              // DenseMatrix
-          0                   // OMP task depth
-        );
-      };
+      std::cout << "peak_dense_mem AFTER_FACT MB= "
+                << peak_dense_mem/1.e6 << std::endl;
 
-      // Lambda for HSS as preconditioner
-      auto HSS_solve = [&](scalar_t* bp) {
-        DenseMatrixWrapper<scalar_t> dmw_bp(n(), size_t(1), bp, n());
-        H.solve(ULV, dmw_bp);
-      };
-
-      // // Lambda for dense LU as preconditioner
-      // auto LU_solve = [&](scalar_t* bp) {
-      //   DenseMatrixWrapper<scalar_t> dmw_bp(n(), size_t(1), bp, n());
-      //   auto x = Kdense_LU.solve(dmw_bp, piv, 0);
-      //   dmw_bp.copy(x);
-      // };
-
-      // Lambda for GMRes
-      auto iter_wrapper = [&](const std::function<void(scalar_t*)>& prec) {
-        scalar_t opts_rel_tol       = 1e-4;
-        scalar_t opts_abs_tol       = 1e-20;
-        int      opts_maxit         = 100;
-        int      opts_gmres_restart = 30;
-        int      totit;
-        GMRes
-        (
-          spmv,
-          prec,
-          n(),
-          weights_gmres.data(),         // scalar_t*
-          z_gmres.data(),               // const scalar_t*
-          opts_rel_tol,
-          opts_abs_tol,
-          totit,
-          opts_maxit,
-          opts_gmres_restart,
-          GramSchmidtType::MODIFIED,
-          false,                          // non_zero_guess?
-          true//,                         // verbose?
-          //hss_opts.rel_tol()            // to name output file
-        );
-        std::cout << "## Krylov iterations: " << totit << std::endl;
-      };
-
-      // Execute GMRES
-      iter_wrapper(HSS_solve);
-      // iter_wrapper(LU_solve);
-
-      // Copy result to vector <weights>
-      weights = weights_gmres;
-    #endif
-
-#endif
       if (opts.verbose())
-        std::cout << "# solve time = " << timer.elapsed() << std::endl;
+        std::cout << "# solution start..." << std::endl;
+      #if ITERATIVE_REFINEMENT == 1
+        DenseMW_t rhs(n(), 1, labels.data(), n());
+        DenseM_t weights(rhs), residual(n(), 1);
+        H.solve(ULV, weights);
+        auto rhs_normF = rhs.normF();
+        using real_t = typename RealType<scalar_t>::value_type;
+        for (int ref=0; ref<3; ref++) {
+          auto residual = H.apply(weights);
+          residual.scaled_add(scalar_t(-1.), rhs);
+          auto rres = residual.normF() / rhs_normF;
+          if (opts.verbose())
+            std::cout << "||H*weights - labels||_2/||labels||_2 = "
+                      << rres << std::endl;
+          if (rres < 10*blas::lamch<real_t>('E')) break;
+          H.solve(ULV, residual);
+          weights.scaled_add(scalar_t(-1.), residual);
+        }
+      #else // no iterative refinement
+        DenseM_t weights(n(), 1, labels.data(), n());
+        #if DIRECT_SOLVE == 1
+          H.solve(ULV, weights);
+        #else // no direct solve
+          const DenseMatrix<scalar_t> z_gmres(weights); // copy to pass to GMRES (x)
+          DenseMatrix<scalar_t> weights_gmres(weights); // copy to pass to GMRES (b)
+          auto Kdense = // Needs the original dense kernel matrix
+
+          // Lambda spmv
+          std::function<void(const scalar_t*, scalar_t*)>
+          spmv = [&](const scalar_t* x, scalar_t* b) {
+            auto cdmw_x = ConstDenseMatrixWrapperPtr<scalar_t> (n(), size_t(1), x, n());
+            DenseMatrixWrapper<scalar_t> dmw_b(n(), size_t(1), b, n());
+            // Operation: b = KMM*x
+            gemv(
+              Trans::N,
+              scalar_t(1.0),
+              Kdense,          // DenseMatrix
+              *cdmw_x,            // ConstDenseMatrixWrapperPtr
+              scalar_t(0.0),
+              dmw_b,              // DenseMatrix
+              0                   // OMP task depth
+            );
+          };
+
+          // Lambda for HSS as preconditioner
+          auto HSS_solve = [&](scalar_t* bp) {
+            DenseMatrixWrapper<scalar_t> dmw_bp(n(), size_t(1), bp, n());
+            H.solve(ULV, dmw_bp);
+          };
+
+          // // Lambda for dense LU as preconditioner
+          // auto LU_solve = [&](scalar_t* bp) {
+          //   DenseMatrixWrapper<scalar_t> dmw_bp(n(), size_t(1), bp, n());
+          //   auto x = Kdense_LU.solve(dmw_bp, piv, 0);
+          //   dmw_bp.copy(x);
+          // };
+
+          // Lambda for GMRes
+          auto iter_wrapper = [&](const std::function<void(scalar_t*)>& prec) {
+            scalar_t opts_rel_tol       = 1e-4;
+            scalar_t opts_abs_tol       = 1e-20;
+            int      opts_maxit         = 100;
+            int      opts_gmres_restart = 30;
+            int      totit;
+            GMRes
+            (
+              spmv,
+              prec,
+              n(),
+              weights_gmres.data(),         // scalar_t*
+              z_gmres.data(),               // const scalar_t*
+              opts_rel_tol,
+              opts_abs_tol,
+              totit,
+              opts_maxit,
+              opts_gmres_restart,
+              GramSchmidtType::MODIFIED,
+              false,                          // non_zero_guess?
+              true//,                         // verbose?
+              //hss_opts.rel_tol()            // to name output file
+            );
+            std::cout << "## Krylov iterations: " << totit << std::endl;
+          };
+
+          // Execute GMRES
+          iter_wrapper(HSS_solve);
+          // iter_wrapper(LU_solve);
+
+          // Copy result to vector <weights>
+          weights = weights_gmres;
+        #endif
+
+        if (opts.verbose())
+          std::cout << "# solve time = " << timer.elapsed() << std::endl;
+      #endif // iterative or direct solve
+
+      std::cout << "peak_dense_mem AFTER_SOLV MB= "
+                << peak_dense_mem/1.e6 << std::endl;
+
       return weights;
     }
 
@@ -205,12 +222,13 @@ namespace strumpack {
     (const DenseM_t& test, const DenseM_t& weights) const {
       assert(test.rows() == d());
       std::vector<scalar_t> prediction(test.cols());
-#pragma omp parallel for
+      #pragma omp parallel for
       for (std::size_t c=0; c<test.cols(); c++)
         for (std::size_t r=0; r<n(); r++)
           prediction[c] += weights(r, 0) *
             eval_kernel_function(data_.ptr(0, r), test.ptr(0, c));
       return prediction;
+
     }
 
 

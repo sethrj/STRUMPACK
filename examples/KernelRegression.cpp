@@ -42,6 +42,8 @@ using namespace strumpack;
 using namespace strumpack::HSS;
 using namespace strumpack::kernel;
 
+extern std::size_t dense_mem;
+extern std::size_t peak_dense_mem;
 
 template<typename scalar_t> vector<scalar_t>
 read_from_file(string filename) {
@@ -55,6 +57,7 @@ read_from_file(string filename) {
       data.push_back(stod(s));
   }
   data.shrink_to_fit();
+
   return data;
 }
 
@@ -62,7 +65,7 @@ read_from_file(string filename) {
 int main(int argc, char *argv[]) {
   TaskTimer total_time("total_time");
   total_time.start();
-  using scalar_t = double;
+  using scalar_t = float;
   string filename("smalltest.dat");
   size_t d = 2;
   scalar_t h = 3.;
@@ -92,7 +95,7 @@ int main(int argc, char *argv[]) {
     hss_opts.describe_options();
   TaskTimer timer("compression");
 
-  cout << "folder is " << hss_opts.scratch_folder() << endl;
+  // cout << "folder is " << hss_opts.scratch_folder() << endl;
   cout << "# Reading data ..." << endl;
   timer.start();
   // Read from csv files
@@ -111,25 +114,28 @@ int main(int argc, char *argv[]) {
                                test_points(d, m, testing.data(), d);
 
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
-
   auto weights = K->fit_HSS(train_labels, hss_opts);
-  return 0;
 
-  cout << endl << "# prediction start..." << endl;
-  timer.start();
-  auto prediction = K->predict(test_points, weights);
-  cout << "# prediction took " << timer.elapsed() << endl;
+  // cout << endl << "# prediction start..." << endl;
+  // timer.start();
+  // auto prediction = K->predict(test_points, weights);
+  // cout << "# prediction took " << timer.elapsed() << endl;
 
-  // compute accuracy score of prediction
-  size_t incorrect_quant = 0;
-  for (size_t i=0; i<m; i++)
-    if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-      (prediction[i] < 0 && test_labels[i] >= 0))
-      incorrect_quant++;
-  cout << "# c-err: "
-  << (scalar_t(incorrect_quant) / m) * 100. << "%"
-  << endl;
+  // // compute accuracy score of prediction
+  // size_t incorrect_quant = 0;
+  // for (size_t i=0; i<m; i++)
+  //   if ((prediction[i] >= 0 && test_labels[i] < 0) ||
+  //     (prediction[i] < 0 && test_labels[i] >= 0))
+  //     incorrect_quant++;
+  // cout << "# c-err: "
+  // << (scalar_t(incorrect_quant) / m) * 100. << "%"
+  // << endl;
 
-  cout << "# total_time: " << total_time.elapsed() << endl << endl;
+  // cout << "# total_time: " << total_time.elapsed() << endl << endl;
+
+  // std::cout << "dense_memAFT = " <<  dense_mem << std::endl;
+  std::cout << "peak_dense_mem END_PROGRAM MB= " <<  peak_dense_mem/1.e6 << std::endl;
+
+  std::cout << "Next it's return" << std::endl;
   return 0;
   }

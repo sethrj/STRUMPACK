@@ -41,9 +41,9 @@ namespace strumpack {
                       std::size_t bytes){
       std::size_t memory = m*n*bytes;
       memory_counter += memory;
-      std::cout << "CummMemoryMB> " << memory_counter/1e6 << " >CummMemory "
-                << desc << "[" << m << "," << n << "] = "
-                << memory << std::endl;
+      // std::cout << "CummMemoryMB> " << memory_counter/1e6 << " >CummMemory "
+      //           << desc << "[" << m << "," << n << "] = "
+      //           << memory << std::endl;
     }
 
     template<typename scalar_t> void
@@ -54,26 +54,67 @@ namespace strumpack {
          const std::vector<std::size_t>& J, DenseM_t& B){
         K(I,J,B);
       };
-      int ann_number = std::min(int(K.n()), opts.approximate_neighbors());
+      int n = int(K.n());
+      int ann_number = std::min(n, opts.approximate_neighbors());
       std::mt19937 gen(1); // reproducible
-      // Adaptive ANN
-      while (!this->is_compressed()) {
+      TaskTimer timer("approximate_neighbors");
+
+      std::string ann_filename = opts.scratch_folder()+"/"+"ann_"+std::to_string(ann_number)+"_"+std::to_string(n)+".binmatrix";
+      std::string scores_filename = opts.scratch_folder()+"/"+"scores_"+std::to_string(ann_number)+"_"+std::to_string(n)+".binmatrix";
+      // std::cout << "ann file:   " << ann_filename << std::endl;
+      // std::cout << "scores file:" << scores_filename << std::endl;
+
+      // // Check if matrices were precomputed and stored
+      if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+        fclose(file);
+        std::cout << "# Found ANN matrices files, reading..." << std::endl;
         DenseMatrix<std::uint32_t> ann;
         DenseMatrix<real_t> scores;
-        TaskTimer timer("approximate_neighbors");
+        ann.resize(ann_number,n);
+        scores.resize(ann_number,n);
         timer.start();
-        find_approximate_neighbors
-          (K.data(), opts.ann_iterations(), ann_number, ann, scores, gen);
-        if (opts.verbose())
-          std::cout << "## k-ANN= " << ann_number
-                    << " approximate neighbor search time = "
-                    << timer.elapsed() << std::endl;
+        ann.read_from_binary_file(ann_filename);
+        scores.read_from_binary_file(scores_filename);
+        std::cout << "# Reading ANN files took "
+                  << timer.elapsed() << std::endl;
+        // Calling compress routine
         WorkCompressANN<scalar_t> w;
-#pragma omp parallel if(!omp_in_parallel())
-#pragma omp single nowait
+        #pragma omp parallel if(!omp_in_parallel())
+        #pragma omp single nowait
         compress_recursive_ann
           (ann, scores, Aelem, opts, w, this->_openmp_task_depth);
-        ann_number = std::min(2*ann_number, int(K.n()));
+      }
+      else {
+        // Adaptive ANN
+        DenseMatrix<std::uint32_t> ann;
+        DenseMatrix<real_t> scores;
+        while (!this->is_compressed()) {
+          timer.start();
+          find_approximate_neighbors
+            (K.data(), opts.ann_iterations(), ann_number, ann, scores, gen);
+          if (opts.verbose())
+            std::cout << "## k-ANN= " << ann_number
+                      << " approximate neighbor search time = "
+                      << timer.elapsed() << std::endl;
+          WorkCompressANN<scalar_t> w;
+          #pragma omp parallel if(!omp_in_parallel())
+          #pragma omp single nowait
+          compress_recursive_ann
+            (ann, scores, Aelem, opts, w, this->_openmp_task_depth);
+          ann_number = std::min(2*ann_number, n);
+        }
+        // Adaptive ANN
+        std::cout << "# Saving (ANN = " << ann_number
+                  << ") matrices to binary file..." << std::endl;
+        ann.print_to_binary_file(ann_filename);
+        scores.print_to_binary_file(scores_filename);
+        // Check file was saved
+        if (FILE *file = fopen(ann_filename.c_str(), "r")){
+          std::cout << "# Matrices saved succesfully" << std::endl;
+          fclose(file);
+        }
+        else
+          std::cout << "# Error saving matrices!" << std::endl;
       }
     }
 

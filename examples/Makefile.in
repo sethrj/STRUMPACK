@@ -1,5 +1,4 @@
-all: KernelRegression KernelRegressionMPI \
-  KernelRegressionANNdriverMPI KernelRegressionANNdriver
+all: KernelRegression MemoryCheck
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@
@@ -114,6 +113,11 @@ KernelRegressionANNdriverMPI: KernelRegressionANNdriverMPI.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegressionANNdriverMPI.o
 	$(CXX) $(LDFLAGS) KernelRegressionANNdriverMPI.o -o $@ $(LIBS)
 	$(RM) KernelRegressionANNdriverMPI.o
+
+MemoryCheck: MemoryCheck.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o MemoryCheck.o
+	$(CXX) $(LDFLAGS) MemoryCheck.o -o $@ $(LIBS)
+	$(RM) MemoryCheck.o
 
 clean:
 	rm -f *~ *o @C_EXAMPLES@ \
