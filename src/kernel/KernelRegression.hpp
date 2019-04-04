@@ -60,18 +60,12 @@ namespace strumpack {
     DenseMatrix<scalar_t> Kernel<scalar_t>::fit_HSS
     (std::vector<scalar_t>& labels, const HSS::HSSOptions<scalar_t>& opts) {
       TaskTimer timer("compression");
-      std::cout << "peak_dense_mem BEFORE_COMP MB= "
-                << peak_dense_mem/1.e6 << std::endl
-                << "memory_counter BEFORE_COMP MB= "
-                << memory_counter/1.e6 << std::endl;
       if (opts.verbose())
         std::cout << "# starting HSS compression..." << std::endl;
       std::vector<int> perm;
       timer.start();
-      std::cout << "###############" << std::endl;
       HSS::HSSMatrix<scalar_t> H(*this, perm, opts);
-      std::cout << "###############" << std::endl;
-      std::cout << "## HSS_compression_time = "
+      std::cout << "# HSS_compression_time = "
                 << timer.elapsed() << std::endl;
       DenseMW_t B(1, n(), labels.data(), 1);
       B.lapmt(perm, true);
@@ -90,8 +84,7 @@ namespace strumpack {
                   << "# HSS memory_counter_H = "
                   << memory_counter / 1e6 << " MB" << std::endl;
       }
-
-      // Computing error against dense matrix
+      // // Computing error against dense matrix
       // if ( n()<= 1000 ){
       //   DenseM_t Kdense(n(),n());
       //   for(int j = 0; j < n(); j++){
@@ -104,25 +97,23 @@ namespace strumpack {
       //   std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
       //   HSSd.normF() / Kdense.normF() << std::endl;
       // }
-      std::cout << "peak_dense_mem AFTER_COMP MB= "
-                << peak_dense_mem/1.e6 << " "
-                << "memory_counter AFTER_COMP MB= "
-                << memory_counter/1.e6 << std::endl;
+      params::print_dense_counter("AFTER COMP");
 
-      std::cout << "# factorization start" << std::endl;
+      std::cout << "# factorization started..." << std::endl;
       timer.start();
       auto ULV = H.factor();
       if (opts.verbose())
-        std::cout << "# factorization time = "
-                  << timer.elapsed() << std::endl;
-
-      std::cout << "peak_dense_mem AFTER_FACT MB= "
-                << peak_dense_mem/1.e6 << " "
-                << "memory_counter AFTER_FACT MB= "
-                << memory_counter/1.e6 << std::endl;
+        std::cout << "# ULV_factorization_time = "
+                  << timer.elapsed()
+                  << std::endl
+                  << "# ULV_memory_MB = "
+                  << ULV.memory()/1.e6
+                  << std::endl;
+      params::print_dense_counter("AFTER FACT");
 
       if (opts.verbose())
-        std::cout << "# solution start..." << std::endl;
+        std::cout << "# solution started..." << std::endl;
+
       #if ITERATIVE_REFINEMENT == 1
         DenseMW_t rhs(n(), 1, labels.data(), n());
         DenseM_t weights(rhs), residual(n(), 1);
@@ -214,15 +205,11 @@ namespace strumpack {
           weights = weights_gmres;
         #endif
 
-        if (opts.verbose())
-          std::cout << "# solve time = " << timer.elapsed() << std::endl;
       #endif // iterative or direct solve
 
-      std::cout << "peak_dense_mem AFTER_SOLV MB= "
-                << peak_dense_mem/1.e6 << " "
-                << "memory_counter AFTER_SOLV MB= "
-                << memory_counter/1.e6 << std::endl;
-
+      if (opts.verbose())
+        std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
+      params::print_dense_counter("AFTER SOLVE");
       // DenseM_t weights(1, 1);
       return weights;
     }
@@ -250,7 +237,7 @@ namespace strumpack {
       TaskTimer timer("HSScompression");
       auto& c = grid.Comm();
       bool verb = opts.verbose() && c.is_root();
-      if (verb) std::cout << "# starting HSS compression..." << std::endl;
+      if (verb) std::cout << "# Compression started..." << std::endl;
       timer.start();
       std::vector<int> perm;
       HSS::HSSMatrixMPI<scalar_t> H(*this, &grid, perm, opts);
@@ -320,7 +307,7 @@ namespace strumpack {
       H.solve(ULV, weights);
 #endif
       if (verb)
-        std::cout << "# solve time = " << timer.elapsed() << std::endl;
+        std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
       return weights;
     }
 

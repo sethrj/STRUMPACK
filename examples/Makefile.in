@@ -1,4 +1,4 @@
-all: KernelRegression MemoryCheck
+all: KernelRegression Sandbox
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@
@@ -113,16 +113,17 @@ KernelRegressionANNdriverMPI: KernelRegressionANNdriverMPI.cpp
 	$(CXX) $(LDFLAGS) KernelRegressionANNdriverMPI.o -o $@ $(LIBS)
 	$(RM) KernelRegressionANNdriverMPI.o
 
-MemoryCheck: MemoryCheck.cpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o MemoryCheck.o
-	$(CXX) $(LDFLAGS) MemoryCheck.o -o $@ $(LIBS)
-	$(RM) MemoryCheck.o
+Sandbox: Sandbox.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o Sandbox.o
+	$(CXX) $(LDFLAGS) Sandbox.o -o $@ $(LIBS)
+	$(RM) Sandbox.o
 
 clean:
 	rm -f *~ *o @C_EXAMPLES@ \
 	testPoisson2d testPoisson3d \
 	testMMdouble testMMdouble64 testMMfloat \
 	mtx2bin bin2mtx KernelRegression \
-	KernelRegressionNys @MPI_EXAMPLES@
+	KernelRegressionNys @MPI_EXAMPLES@ \
+  Sandbox
 
 

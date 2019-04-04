@@ -821,8 +821,6 @@ namespace strumpack {
     (std::size_t m, std::size_t n, scalar_t* D, std::size_t ld) {
       this->data_ = D; this->rows_ = m; this->cols_ = n;
       this->ld_ = std::max(std::size_t(1), ld);
-      // dense_mem += sizeof(scalar_t)*m*n;
-      // peak_dense_mem = std::max(peak_dense_mem,dense_mem);
       // if ( print_counters )
       //   std::cout << "Called DenseMatrixWrapper1("
       //             << m << "," << n << "), allocated "
@@ -850,8 +848,6 @@ namespace strumpack {
       : DenseMatrixWrapper<scalar_t>(m, n, &D(i, j), D.ld()) {
       assert(i+m <= D.rows());
       assert(j+n <= D.cols());
-      // dense_mem += sizeof(scalar_t)*m*n;
-      // peak_dense_mem = std::max(peak_dense_mem,dense_mem);
       // if ( print_counters )
       //   std::cout << "Called DenseMatrixWrapper2("
       //             << m << ","<<n<<"), allocated "
@@ -866,7 +862,6 @@ namespace strumpack {
      * not free any memory.
      */
     virtual ~DenseMatrixWrapper() {
-      // dense_mem -= sizeof(scalar_t)*this->rows_*this->cols_;
       // if ( print_counters )
         // std::cout << "Called ~DenseMatrixWrapper("
         //           << this->rows_<<","<<this->cols_<<"), deallocated "
@@ -1134,8 +1129,7 @@ namespace strumpack {
   (std::size_t m, std::size_t n)
     : data_(new scalar_t[m*n]), rows_(m),
       cols_(n), ld_(std::max(std::size_t(1), m)) {
-    dense_mem += sizeof(scalar_t)*rows_*cols_;
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
       std::cout << "Called DenseMatrix1("
                 << rows_ << "," << cols_ << "), allocated "
@@ -1149,8 +1143,7 @@ namespace strumpack {
     : data_(new scalar_t[m*n]), rows_(m), cols_(n),
       ld_(std::max(std::size_t(1), m)) {
     assert(ld >= m);
-    dense_mem += sizeof(scalar_t)*rows_*cols_;
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
       std::cout << "Called DenseMatrix2("
                 << rows_ << "," <<cols_ << "), allocated "
@@ -1167,8 +1160,7 @@ namespace strumpack {
    std::size_t i, std::size_t j)
     : data_(new scalar_t[m*n]), rows_(m), cols_(n),
       ld_(std::max(std::size_t(1), m)) {
-    dense_mem += sizeof(scalar_t)*rows_*cols_;
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
       std::cout << "Called DenseMatrix3("
                 << rows_ << "," << cols_ << "), allocated "
@@ -1184,8 +1176,7 @@ namespace strumpack {
   DenseMatrix<scalar_t>::DenseMatrix(const DenseMatrix<scalar_t>& D)
     : data_(new scalar_t[D.rows()*D.cols()]), rows_(D.rows()),
       cols_(D.cols()), ld_(std::max(std::size_t(1), D.rows())) {
-    dense_mem += sizeof(scalar_t)*rows_*cols_;
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
       std::cout << "Called DenseMatrix4("
                 << rows_ << "," << cols_ << "), allocated "
@@ -1200,8 +1191,7 @@ namespace strumpack {
   template<typename scalar_t>
   DenseMatrix<scalar_t>::DenseMatrix(DenseMatrix<scalar_t>&& D)
     : data_(D.data()), rows_(D.rows()), cols_(D.cols()), ld_(D.ld()) {
-    dense_mem += sizeof(scalar_t)*rows_*cols_;
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
       std::cout << "Called DenseMatrix5("
                 <<rows_<<","<<cols_<<"), allocated "
@@ -1216,7 +1206,7 @@ namespace strumpack {
 
   template<typename scalar_t> DenseMatrix<scalar_t>::~DenseMatrix() {
     if ( data_ != nullptr ){
-      dense_mem -= sizeof(scalar_t)*rows_*cols_;
+      STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
       if ( print_counters )
         std::cout << "Called ~DenseMatrix("
                   << rows_ << "," << cols_ << "), "
@@ -1237,13 +1227,12 @@ namespace strumpack {
       std::cout << "Called DenseMatrix=DenseMatrix1 ("
                 << D.rows() << "," << D.cols() << "), " << std::endl;
     if (rows_ != D.rows() || cols_ != D.cols()) {
-      dense_mem -= sizeof(scalar_t)*rows_*cols_; //decrement counter
+      STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
       rows_ = D.rows();
       cols_ = D.cols();
       delete[] data_;
       data_ = new scalar_t[rows_*cols_];
-      dense_mem += sizeof(scalar_t)*rows_*cols_; //increment counter
-      peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+      STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
       ld_ = std::max(std::size_t(1), rows_);
     }
     for (std::size_t j=0; j<cols_; j++)
@@ -1257,15 +1246,14 @@ namespace strumpack {
     if ( print_counters )
       std::cout << "Called DenseMatrix=DenseMatrix2 ("
                 << D.rows() << "," << D.cols() << "), " << std::endl;
-    dense_mem -= sizeof(scalar_t)*D.rows()*D.cols(); //decrement counter
+    STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*D.rows()*D.cols());
     rows_ = D.rows();
     cols_ = D.cols();
     ld_ = D.ld();
     delete[] data_;
     data_ = D.data();
     D.data_ = nullptr;
-    dense_mem += sizeof(scalar_t)*rows_*cols_; //increment counter
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     return *this;
   }
 
@@ -1351,7 +1339,7 @@ namespace strumpack {
   }
 
   template<typename scalar_t> void DenseMatrix<scalar_t>::clear() {
-    dense_mem -= sizeof(scalar_t)*rows_*cols_;
+    STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
       std::cout << "Called DenseMatrix.clear("
                 << rows_ << "," << cols_ << ") deallocated "
@@ -1367,7 +1355,7 @@ namespace strumpack {
 
   template<typename scalar_t> void
   DenseMatrix<scalar_t>::resize(std::size_t m, std::size_t n) {
-    dense_mem -= sizeof(scalar_t)*rows_*cols_;
+    STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters ){
       std::cout << "Called DenseMatrix.resize("
                 <<rows_ << "," << cols_ << ") ";
@@ -1383,8 +1371,7 @@ namespace strumpack {
     ld_ = std::max(std::size_t(1), m);
     rows_ = m;
     cols_ = n;
-    dense_mem += sizeof(scalar_t)*rows_*cols_;
-    peak_dense_mem = std::max(peak_dense_mem,dense_mem);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters ){
       std::cout << " allocated = " << sizeof(scalar_t)*rows_*cols_;
       std::cout << " dense_mem = " << dense_mem/1.e6 << std::endl;

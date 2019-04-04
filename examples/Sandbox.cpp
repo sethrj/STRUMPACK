@@ -45,8 +45,28 @@ using scalar_t = float;
 
 extern int dense_memory_counter;
 
+#ifdef STRUMPACK_COUNT_FLOPS
+# define STR_DEBUG_ONLY(cmd) cmd;
+# define STR_RELEASE_ONLY(cmd)
+#else
+# define STR_DEBUG_ONLY(cmd)
+# define STR_RELEASE_ONLY(cmd) cmd;
+#endif
+
 int main(int argc, char *argv[]) {
 
+  STR_DEBUG_ONLY(
+    std::cout << "hello from STR_DEBUG_ONLY" << std::endl;
+  )
+
+  STR_RELEASE_ONLY(
+    std::cout << "hello from STR_RELEASE_ONLY" << std::endl;
+  )
+
+  STRUMPACK_DENSE_ADD_MEM(20);
+  STRUMPACK_DENSE_ADD_MEM(645);
+  STRUMPACK_DENSE_SUB_MEM(45);
+  params::print_dense_counter("Testing");
 
   std::size_t n = 1024;
   DenseMatrix<scalar_t> ann1(n, n);

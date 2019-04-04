@@ -42,9 +42,6 @@ using namespace strumpack;
 using namespace strumpack::HSS;
 using namespace strumpack::kernel;
 
-extern std::size_t dense_mem;
-extern std::size_t peak_dense_mem;
-
 template<typename scalar_t> vector<scalar_t>
 read_from_file(string filename) {
   vector<scalar_t> data;
@@ -57,10 +54,8 @@ read_from_file(string filename) {
       data.push_back(stod(s));
   }
   data.shrink_to_fit();
-
   return data;
 }
-
 
 int main(int argc, char *argv[]) {
   TaskTimer total_time("total_time");
@@ -93,12 +88,10 @@ int main(int argc, char *argv[]) {
   hss_opts.set_from_command_line(argc, argv);
   if (hss_opts.verbose())
     hss_opts.describe_options();
-  TaskTimer timer("compression");
+  TaskTimer timer("misc");
 
-  // cout << "folder is " << hss_opts.scratch_folder() << endl;
   cout << "# Reading data ..." << endl;
   timer.start();
-  // Read from csv files
   auto training     = read_from_file<scalar_t>(filename + "_train.csv");
   auto testing      = read_from_file<scalar_t>(filename + "_" + mode + ".csv");
   auto train_labels = read_from_file<scalar_t>(filename + "_train_label.csv");
@@ -109,7 +102,6 @@ int main(int argc, char *argv[]) {
   size_t m = testing.size() / d;
   cout << "# training dataset = " << n << " x " << d << endl;
   cout << "# testing dataset  = " << m << " x " << d << endl << endl;
-
   DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d),
                                test_points(d, m, testing.data(), d);
 
@@ -131,11 +123,5 @@ int main(int argc, char *argv[]) {
   // << endl;
 
   cout << "# total_time: " << total_time.elapsed() << endl << endl;
-
-  std::cout << "peak_dense_mem END_PROGRAM MB= "
-            << peak_dense_mem/1.e6 << " "
-            << "memory_counter END_PROGRAM MB= "
-            << memory_counter/1.e6 << std::endl;
-
   return 0;
   }

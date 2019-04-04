@@ -26,6 +26,7 @@
  *             Division).
  *
  */
+#include <iomanip>
 #include "StrumpackParameters.hpp"
 #if defined(_OPENMP)
 #include <omp.h>
@@ -41,6 +42,26 @@ namespace strumpack {
 
   namespace params {
 
+  void print_dense_counter(std::string description){
+    std::cout << "### "
+              << std::left
+              << std::setw(15)
+              << description
+              << " "
+              << "dense_MB = "
+              << std::setw(10)
+              << std::left
+              << params::dense_counter/1.e6
+              << "    "
+              << "peak_dense_MB = "
+              << std::setw(10)
+              << std::left
+              << params::peak_dense_counter/1.e6
+              << " "
+              << "###"
+              << std::endl;
+  }
+
 #if defined(_OPENMP)
     int num_threads = omp_get_max_threads();
     int task_recursion_cutoff_level = (omp_get_max_threads() == 1) ? 0
@@ -52,6 +73,8 @@ namespace strumpack {
 
     std::atomic<long long int> flops(0);
     std::atomic<long long int> bytes(0);
+    std::atomic<long long int> dense_counter(0);
+    std::atomic<long long int> peak_dense_counter(0);
 
     std::atomic<long long int> CB_sample_flops(0);
     std::atomic<long long int> sparse_sample_flops(0);

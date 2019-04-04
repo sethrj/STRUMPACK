@@ -72,6 +72,8 @@ namespace strumpack { // these are all global variables
 
     extern std::atomic<long long int> flops;
     extern std::atomic<long long int> bytes;
+    extern std::atomic<long long int> dense_counter;
+    extern std::atomic<long long int> peak_dense_counter;
 
     extern std::atomic<long long int> CB_sample_flops;
     extern std::atomic<long long int> sparse_sample_flops;
@@ -96,6 +98,7 @@ namespace strumpack { // these are all global variables
     extern std::atomic<long long int> invf11_mult_flops;
     extern std::atomic<long long int> f12_mult_flops;
 
+    void print_dense_counter(std::string description);
 #endif //DOXYGEN_SHOULD_SKIP_THIS
 
   } //end namespace params
@@ -148,6 +151,16 @@ namespace strumpack { // these are all global variables
   strumpack::params::invf11_mult_flops += n
 #define STRUMPACK_HODLR_F12_MULT_FLOPS(n)       \
   strumpack::params::f12_mult_flops += n
+
+#define STRUMPACK_DENSE_ADD_MEM(n)                                  \
+  strumpack::params::dense_counter += n;                            \
+  strumpack::params::peak_dense_counter =                           \
+    (long long int) std::max(strumpack::params::peak_dense_counter, \
+    strumpack::params::dense_counter);
+
+#define STRUMPACK_DENSE_SUB_MEM(n)              \
+  strumpack::params::dense_counter -= n;
+
 #else
 #define STRUMPACK_FLOPS(n) void(0);
 #define STRUMPACK_BYTES(n) void(0);
@@ -173,6 +186,9 @@ namespace strumpack { // these are all global variables
 #define STRUMPACK_HODLR_F21_MULT_FLOPS(n) void(0);
 #define STRUMPACK_HODLR_INVF11_MULT_FLOPS(n) void(0);
 #define STRUMPACK_HODLR_F12_FILL_FLOPS(n) void(0);
+
+#define STRUMPACK_ADD_DENSE_MEM(n) void(0);
+#define STRUMPACK_SUB_DENSE_MEM(n) void(0);
 #endif
 #endif // DOXYGEN_SHOULD_SKIP_THIS
 
