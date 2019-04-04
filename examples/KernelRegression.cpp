@@ -120,7 +120,6 @@ int main(int argc, char *argv[]) {
   // timer.start();
   // auto prediction = K->predict(test_points, weights);
   // cout << "# prediction took " << timer.elapsed() << endl;
-
   // // compute accuracy score of prediction
   // size_t incorrect_quant = 0;
   // for (size_t i=0; i<m; i++)
@@ -131,11 +130,12 @@ int main(int argc, char *argv[]) {
   // << (scalar_t(incorrect_quant) / m) * 100. << "%"
   // << endl;
 
-  // cout << "# total_time: " << total_time.elapsed() << endl << endl;
+  cout << "# total_time: " << total_time.elapsed() << endl << endl;
 
-  // std::cout << "dense_memAFT = " <<  dense_mem << std::endl;
-  std::cout << "peak_dense_mem END_PROGRAM MB= " <<  peak_dense_mem/1.e6 << std::endl;
+  std::cout << "peak_dense_mem END_PROGRAM MB= "
+            << peak_dense_mem/1.e6 << " "
+            << "memory_counter END_PROGRAM MB= "
+            << memory_counter/1.e6 << std::endl;
 
-  std::cout << "Next it's return" << std::endl;
   return 0;
   }

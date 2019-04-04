@@ -92,7 +92,6 @@ bin2mtx: bin2mtx.cpp
 KernelRegression: KernelRegression.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegression.o
 	$(CXX) $(LDFLAGS) KernelRegression.o -o $@ $(LIBS)
-	$(RM) KernelRegression.o
 
 KernelRegressionANNdriver: KernelRegressionANNdriver.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegressionANNdriver.o
