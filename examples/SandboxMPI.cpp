@@ -58,9 +58,7 @@ read_from_file(string filename) {
 }
 
 int main(int argc, char *argv[]) {
-  // HODLR code does not support float (yet)
   using scalar_t = float;
-
   TaskTimer timer_all("all");
   timer_all.start();
   MPI_Init(&argc, &argv);
@@ -105,24 +103,7 @@ int main(int argc, char *argv[]) {
     training_points(d, n, training.data(), d),
     test_points(d, m, testing.data(), d);
 
-  // auto check = [&](const std::vector<scalar_t>& prediction) {
-  //   // compute accuracy score of prediction
-  //   if (c.is_root()) {
-  //     size_t incorrect_quant = 0;
-  //     for (size_t i=0; i<m; i++)
-  //       if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-  //           (prediction[i] < 0 && test_labels[i] >= 0))
-  //         incorrect_quant++;
-  //     cout << "# prediction score: "
-  //     << (float(m - incorrect_quant) / m) * 100. << "%" << endl
-  //     << "# c-err: "
-  //     << (float(incorrect_quant) / m) * 100. << "%"
-  //     << endl;
-  //   }
-  // };
-
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
-
   {
     HSSOptions<scalar_t> opts;
     opts.set_verbose(false);
@@ -139,22 +120,6 @@ int main(int argc, char *argv[]) {
     // if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
     // check(prediction);
   }
-
-// #if defined(STRUMPACK_USE_HODLRBF)
-//   {
-//     HODLR::HODLROptions<scalar_t> opts;
-//     opts.set_verbose(true);
-//     opts.set_from_command_line(argc, argv);
-//     if (c.is_root()) opts.describe_options();
-
-//     auto weights = K->fit_HODLR(c, train_labels, opts);
-//     if (c.is_root()) cout << endl << "# HODLR prediction start..." << endl;
-//     timer.start();
-//     auto prediction = K->predict(test_points, weights);
-//     if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
-//     check(prediction);
-//   }
-// #endif
 
   if (c.is_root())
     std::cout << "# total_time: "

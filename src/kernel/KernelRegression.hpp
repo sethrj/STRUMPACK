@@ -258,7 +258,7 @@ namespace strumpack {
                       << "# compression succeeded!" << std::endl;
           else std::cout << "# compression failed!!!" << std::endl;
           std::cout << "# rank_H = " << rank << std::endl
-                    << "# HSS memory(H) = " << mem / 1e6
+                    << "# HSS_memory = " << mem / 1e6
                     << " MB " << std::endl << std::endl
                     << "# factorization start" << std::endl;
         }
@@ -278,6 +278,11 @@ namespace strumpack {
           std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
           HSSd.normF() / Kdense.normF() << std::endl;
       }
+
+      params::print_dense_counter("AFTER COMP");
+      if (verb)
+        std::cout << "# factorization started..." << std::endl;
+
       timer.start();
       auto ULV = H.factor();
       if (verb)
@@ -287,25 +292,25 @@ namespace strumpack {
       DenseMW_t cB(n(), 1, labels.data(), n());
       DistM_t weights(&grid, n(), 1);
       weights.scatter(cB);
-#if ITERATIVE_REFINEMENT == 1
-      DistM_t rhs(weights), residual(&grid, n(), 1);
-      H.solve(ULV, weights);
-      auto rhs_normF = rhs.normF();
-      using real_t = typename RealType<scalar_t>::value_type;
-      for (int ref=0; ref<3; ref++) {
-        auto residual = H.apply(weights);
-        residual.scaled_add(scalar_t(-1.), rhs);
-        auto rres = residual.normF() / rhs_normF;
-        if (verb)
-          std::cout << "||H*weights - labels||_2/||labels||_2 = "
-                    << rres << std::endl;
-        if (rres < 10*blas::lamch<real_t>('E')) break;
-        H.solve(ULV, residual);
-        weights.scaled_add(scalar_t(-1.), residual);
-      }
-#else // no iterative refinement
-      H.solve(ULV, weights);
-#endif
+      #if ITERATIVE_REFINEMENT == 1
+        DistM_t rhs(weights), residual(&grid, n(), 1);
+        H.solve(ULV, weights);
+        auto rhs_normF = rhs.normF();
+        using real_t = typename RealType<scalar_t>::value_type;
+        for (int ref=0; ref<3; ref++) {
+          auto residual = H.apply(weights);
+          residual.scaled_add(scalar_t(-1.), rhs);
+          auto rres = residual.normF() / rhs_normF;
+          if (verb)
+            std::cout << "||H*weights - labels||_2/||labels||_2 = "
+                      << rres << std::endl;
+          if (rres < 10*blas::lamch<real_t>('E')) break;
+          H.solve(ULV, residual);
+          weights.scaled_add(scalar_t(-1.), residual);
+        }
+      #else // no iterative refinement
+        H.solve(ULV, weights);
+      #endif
       if (verb)
         std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
       return weights;
@@ -316,7 +321,7 @@ namespace strumpack {
     (const DenseM_t& test, const DistM_t& weights) const {
       std::vector<scalar_t> prediction(test.cols());
       if (weights.active() && weights.lcols()) {
-#pragma omp parallel for
+        #pragma omp parallel for
         for (std::size_t c=0; c<test.cols(); c++)
           for (std::size_t r=0; r<weights.lrows(); r++) {
             prediction[c] += weights(r, 0) *
@@ -352,6 +357,8 @@ namespace strumpack {
       if (verb)
         std::cout << "# factorization time = "
                   << timer.elapsed() << std::endl
+                  << "# ULV_memory_MV = "
+                  << H.memory()
                   << "# solution start..." << std::endl;
       int lrows = H.lrows();
       DenseMW_t lB(lrows, 1, &labels[H.begin_row()], lrows);
