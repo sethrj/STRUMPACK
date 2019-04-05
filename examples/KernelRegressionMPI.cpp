@@ -68,7 +68,6 @@ int main(int argc, char *argv[]) {
   MPIComm c;
 
   string filename("smalltest.dat");
-  string folder(".");
   int d = 2;
   scalar_t h = 3.;
   scalar_t lambda = 1.;
@@ -78,14 +77,13 @@ int main(int argc, char *argv[]) {
 
   if (c.is_root())
     cout << "# usage: ./KernelRegression file d h lambda "
-         << "kernel(Gauss, Laplace) mode(valid, test) folder" << endl;
+         << "kernel(Gauss, Laplace) mode(valid, test)" << endl;
   if (argc > 1) filename = string(argv[1]);
   if (argc > 2) d = stoi(argv[2]);
   if (argc > 3) h = stof(argv[3]);
   if (argc > 4) lambda = stof(argv[4]);
   if (argc > 5) ktype = kernel_type(string(argv[5]));
   if (argc > 6) mode = string(argv[6]);
-  if (argc > 7) folder = string(argv[7]);
   if (c.is_root())
     cout << "# data dimension  = " << d << endl
          << "# kernel h        = " << h << endl
@@ -108,21 +106,21 @@ int main(int argc, char *argv[]) {
     training_points(d, n, training.data(), d),
     test_points(d, m, testing.data(), d);
 
-  auto check = [&](const std::vector<scalar_t>& prediction) {
-    // compute accuracy score of prediction
-    if (c.is_root()) {
-      size_t incorrect_quant = 0;
-      for (size_t i=0; i<m; i++)
-        if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-            (prediction[i] < 0 && test_labels[i] >= 0))
-          incorrect_quant++;
-      cout << "# prediction score: "
-      << (float(m - incorrect_quant) / m) * 100. << "%" << endl
-      << "# c-err: "
-      << (float(incorrect_quant) / m) * 100. << "%"
-      << endl;
-    }
-  };
+  // auto check = [&](const std::vector<scalar_t>& prediction) {
+  //   // compute accuracy score of prediction
+  //   if (c.is_root()) {
+  //     size_t incorrect_quant = 0;
+  //     for (size_t i=0; i<m; i++)
+  //       if ((prediction[i] >= 0 && test_labels[i] < 0) ||
+  //           (prediction[i] < 0 && test_labels[i] >= 0))
+  //         incorrect_quant++;
+  //     cout << "# prediction score: "
+  //     << (float(m - incorrect_quant) / m) * 100. << "%" << endl
+  //     << "# c-err: "
+  //     << (float(incorrect_quant) / m) * 100. << "%"
+  //     << endl;
+  //   }
+  // };
 
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
 
@@ -134,29 +132,30 @@ int main(int argc, char *argv[]) {
       opts.describe_options();
 
     BLACSGrid g(c);
+    timer.start();
     auto weights = K->fit_HSS(g, train_labels, opts);
-    if (c.is_root()) cout << endl << "# HSS prediction start..." << endl;
-    timer.start();
-    auto prediction = K->predict(test_points, weights);
-    if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
-    check(prediction);
+    if (c.is_root()) cout << "# fit_HSS took " << timer.elapsed() << endl;
+    // if (c.is_root()) cout << endl << "# HSS prediction start..." << endl;
+    // auto prediction = K->predict(test_points, weights);
+    // if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
+    // check(prediction);
   }
 
-#if defined(STRUMPACK_USE_HODLRBF)
-  {
-    HODLR::HODLROptions<scalar_t> opts;
-    opts.set_verbose(true);
-    opts.set_from_command_line(argc, argv);
-    if (c.is_root()) opts.describe_options();
+// #if defined(STRUMPACK_USE_HODLRBF)
+//   {
+//     HODLR::HODLROptions<scalar_t> opts;
+//     opts.set_verbose(true);
+//     opts.set_from_command_line(argc, argv);
+//     if (c.is_root()) opts.describe_options();
 
-    auto weights = K->fit_HODLR(c, train_labels, opts);
-    if (c.is_root()) cout << endl << "# HODLR prediction start..." << endl;
-    timer.start();
-    auto prediction = K->predict(test_points, weights);
-    if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
-    check(prediction);
-  }
-#endif
+//     auto weights = K->fit_HODLR(c, train_labels, opts);
+//     if (c.is_root()) cout << endl << "# HODLR prediction start..." << endl;
+//     timer.start();
+//     auto prediction = K->predict(test_points, weights);
+//     if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
+//     check(prediction);
+//   }
+// #endif
 
   if (c.is_root())
     std::cout << "# total_time: "

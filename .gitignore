@@ -5,3 +5,4 @@ examples/Makefile
 /Testing
 *~
 .vscode/*
+*.out

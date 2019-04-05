@@ -58,11 +58,8 @@ namespace strumpack {
       int ann_number = std::min(n, opts.approximate_neighbors());
       std::mt19937 gen(1); // reproducible
       TaskTimer timer("approximate_neighbors");
-
       std::string ann_filename = opts.scratch_folder()+"/"+"ann_"+std::to_string(ann_number)+"_"+std::to_string(n)+".binmatrix";
       std::string scores_filename = opts.scratch_folder()+"/"+"scores_"+std::to_string(ann_number)+"_"+std::to_string(n)+".binmatrix";
-      // std::cout << "ann file:   " << ann_filename << std::endl;
-      // std::cout << "scores file:" << scores_filename << std::endl;
 
       // // Check if matrices were precomputed and stored
       if (FILE *file = fopen(ann_filename.c_str(), "r")) {
@@ -77,7 +74,7 @@ namespace strumpack {
         scores.read_from_binary_file(scores_filename);
         std::cout << "# Reading ANN files took "
                   << timer.elapsed() << std::endl;
-        // Calling compress routine
+        // Calling compression routine
         WorkCompressANN<scalar_t> w;
         #pragma omp parallel if(!omp_in_parallel())
         #pragma omp single nowait

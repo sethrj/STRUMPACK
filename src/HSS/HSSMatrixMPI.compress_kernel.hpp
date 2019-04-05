@@ -43,85 +43,89 @@ namespace strumpack {
       TaskTimer timer_ann("approximate_neighbors");
       TaskTimer timer_compresion("compression");
       std::mt19937 gen(1); // reproducible
-      int kann = std::min(int(K.n()), opts.approximate_neighbors());
+      int ann_number = std::min(int(K.n()), opts.approximate_neighbors());
       int n = K.n();
+      std::string ann_filename = opts.scratch_folder()+
+                                 "/"+"ann_"+std::to_string(ann_number)+
+                                 "_"+std::to_string(n)+".binmatrix";
+      std::string scores_filename = opts.scratch_folder()+
+                                 "/"+"scores_"+std::to_string(ann_number)+
+                                 "_"+std::to_string(n)+".binmatrix";
 
-      // std::string folder = "/Users/gichavez/Documents/mats/SUSY/susy_d8_1K_1K";
-      // std::string ann_filename = folder+"/"+"ann_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
-      // std::string scores_filename = folder+"/"+"scores_"+std::to_string(kann)+"_"+std::to_string(n)+".binmatrix";
-      // if (Comm().is_root()){
-      //   std::cout << "ann:" << ann_filename << std::endl;
-      //   std::cout << "scores:" << scores_filename << std::endl;
-      // }
-      // if (FILE *file = fopen(ann_filename.c_str(), "r")) {
-      //   fclose(file);
-      //   if (Comm().is_root())
-      //     std::cout << "Found ANN matrices files, all reading" << std::endl;
-      //   ann.resize(kann,n);
-      //   scores.resize(kann,n);
-      //   ann.read_from_binary_file(ann_filename);
-      //   scores.read_from_binary_file(scores_filename);
-      // } else {
-      //   if (Comm().is_root())
-      //     std::cout << std::endl << "Computing ANN..." << std::endl;
-      //   timer_ann.start();
-      //   find_approximate_neighbors(K.data(), opts.ann_iterations(),
-      //     kann, ann, scores, gen);
-      //   if (Comm().is_root()){
-      //     std::cout << "## k-ANN = " << kann
-      //     << " approximate neighbor search time = "
-      //     << timer_ann.elapsed() << std::endl;
-      //       std::cout << "Saving ANN matrices to file..." << std::endl;
-      //     ann.print_to_binary_file(ann_filename);
-      //     scores.print_to_binary_file(scores_filename);
-      //     // Check file was saved
-      //     if (FILE *file = fopen(ann_filename.c_str(), "r")){
-      //       std::cout << "# Matrices saved succesfully" << std::endl;
-      //       fclose(file);
-      //     }
-      //     else
-      //       std::cout << "# Error saving matrices!" << std::endl;
-      //   }
-      // }
+      auto Aelemw = [&]
+        (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
+        DistM_t& B, const DistM_t& A, std::size_t rlo, std::size_t clo,
+        MPI_Comm comm) {
+        std::vector<std::size_t> lI, lJ;
+        lI.reserve(B.lrows());
+        lJ.reserve(B.lcols());
+        for (size_t j=0; j<J.size(); j++)
+          if (B.colg2p(j) == B.pcol())
+            lJ.push_back(J[j]);
+        for (size_t i=0; i<I.size(); i++)
+          if (B.rowg2p(i) == B.prow())
+            lI.push_back(I[i]);
+        auto lB = B.dense_wrapper();
+        K(lI, lJ, lB);
+      };
 
-      timer_compresion.start();
-      while (!this->is_compressed()) {
+      // // Check if matrices were precomputed and stored
+      if (FILE *file = fopen(ann_filename.c_str(), "r")) {
+        fclose(file);
+        if (Comm().is_root())
+          std::cout << "# Found ANN matrices files, reading..." << std::endl;
         DenseMatrix<std::uint32_t> ann;
-        DenseMatrix<scalar_t> scores;
-        if (Comm().is_root())
-          std::cout << std::endl << "Computing ANN..." << std::endl;
+        DenseMatrix<real_t> scores;
+        ann.resize(ann_number,n);
+        scores.resize(ann_number,n);
         timer_ann.start();
-        find_approximate_neighbors(K.data(), opts.ann_iterations(),
-          kann, ann, scores, gen);
+        ann.read_from_binary_file(ann_filename);
+        scores.read_from_binary_file(scores_filename);
         if (Comm().is_root())
-          std::cout << "## k-ANN = " << kann
-                    << " approximate neighbor search time = "
-                    << timer_ann.elapsed() << std::endl;
-        auto Aelemw = [&]
-          (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
-          DistM_t& B, const DistM_t& A, std::size_t rlo, std::size_t clo,
-          MPI_Comm comm) {
-          std::vector<std::size_t> lI, lJ;
-          lI.reserve(B.lrows());
-          lJ.reserve(B.lcols());
-          for (size_t j=0; j<J.size(); j++)
-            if (B.colg2p(j) == B.pcol())
-              lJ.push_back(J[j]);
-          for (size_t i=0; i<I.size(); i++)
-            if (B.rowg2p(i) == B.prow())
-              lI.push_back(I[i]);
-          auto lB = B.dense_wrapper();
-          K(lI, lJ, lB);
-        };
+            std::cout << "# Reading ANN files took "
+                  << timer_ann.elapsed() << std::endl;
+        // Calling compression routine
         WorkCompressMPIANN<scalar_t> w;
-
-        compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());
-        kann = std::min(2*kann, int(K.n()));
+          compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());
       }
-
-    if (Comm().is_root())
-      std::cout << "## HSS_compression_time = "
-                << timer_compresion.elapsed() << std::endl;
+      else {
+        // Adaptive ANN loop: starts
+        DenseMatrix<std::uint32_t> ann;
+        DenseMatrix<real_t> scores;
+        timer_compresion.start();
+        while (!this->is_compressed()) {
+          ann.clear();
+          scores.clear();
+          if (Comm().is_root())
+            std::cout << std::endl << "Computing ANN..." << std::endl;
+          timer_ann.start();
+          find_approximate_neighbors(K.data(), opts.ann_iterations(),
+            ann_number, ann, scores, gen);
+          if (Comm().is_root())
+            std::cout << "## k-ANN = " << ann_number
+                      << " approximate neighbor search time = "
+                      << timer_ann.elapsed() << std::endl;
+          WorkCompressMPIANN<scalar_t> w;
+          compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());
+          ann_number = std::min(2*ann_number, int(K.n()));
+        }
+        // Adaptive ANN loop: end
+        if (Comm().is_root()){
+          std::cout << "## HSS_compression_time = "
+                    << timer_compresion.elapsed() << std::endl;
+          std::cout << "# Saving (ANN = " << ann_number/2
+                    << ") matrices to binary file..." << std::endl;
+          ann.print_to_binary_file(ann_filename);
+          scores.print_to_binary_file(scores_filename);
+          // Check file was saved
+          if (FILE *file = fopen(ann_filename.c_str(), "r")){
+            std::cout << "# Matrices saved succesfully" << std::endl;
+            fclose(file);
+          }
+          else
+            std::cout << "# Error saving matrices!" << std::endl;
+        }
+      }
     }
 
     template<typename scalar_t> void

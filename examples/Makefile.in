@@ -1,4 +1,4 @@
-all: KernelRegression Sandbox
+all: KernelRegressionMPI KernelRegression Sandbox
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@
