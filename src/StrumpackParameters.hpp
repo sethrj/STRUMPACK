@@ -187,8 +187,8 @@ namespace strumpack { // these are all global variables
 #define STRUMPACK_HODLR_INVF11_MULT_FLOPS(n) void(0);
 #define STRUMPACK_HODLR_F12_FILL_FLOPS(n) void(0);
 
-#define STRUMPACK_ADD_DENSE_MEM(n) void(0);
-#define STRUMPACK_SUB_DENSE_MEM(n) void(0);
+#define STRUMPACK_DENSE_ADD_MEM(n) void(0);
+#define STRUMPACK_DENSE_SUB_MEM(n) void(0);
 #endif
 #endif // DOXYGEN_SHOULD_SKIP_THIS
 

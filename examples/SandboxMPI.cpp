@@ -57,6 +57,41 @@ read_from_file(string filename) {
   return data;
 }
 
+void print_dense_counter_MPI(std::string description, MPIComm c){
+#if defined(STRUMPACK_COUNT_FLOPS)
+  // 1. Reduce
+  std::array<long long int, 2> red_dense_counter = {
+    params::dense_counter.load(),
+    params::peak_dense_counter.load()
+  };
+  c.reduce(red_dense_counter.data(), red_dense_counter.size(), MPI_SUM);
+  // params::dense_counter      = red_dense_counter[0];
+  // params::peak_dense_counter = red_dense_counter[1];
+
+  // 2. Print
+  if (c.is_root())
+    std::cout << "### "
+            << std::left
+            << std::setw(15)
+            << description
+            << " "
+            << "dense_MB = "
+            << std::setw(10)
+            << std::left
+            << red_dense_counter[0]/1.e6
+            << "    "
+            << "peak_dense_MB = "
+            << std::setw(10)
+            << std::left
+            << red_dense_counter[1]/1.e6
+            << " "
+            << "###"
+            << std::endl;
+  red_dense_counter[0] = 0;
+  red_dense_counter[1] = 0;
+#endif
+}
+
 int main(int argc, char *argv[]) {
   using scalar_t = float;
   TaskTimer timer_all("all");
@@ -86,40 +121,50 @@ int main(int argc, char *argv[]) {
          << "# kernel h        = " << h << endl
          << "# lambda          = " << lambda << endl
          << "# kernel type     = " << get_name(ktype) << endl
-         << "# validation/test = " << mode << endl;
+         << "# validation/test = " << mode << endl << endl;
 
-  auto training     = read_from_file<scalar_t>(filename + "_train.csv");
-  auto testing      = read_from_file<scalar_t>(filename + "_" + mode + ".csv");
-  auto train_labels = read_from_file<scalar_t>(filename + "_train_label.csv");
-  auto test_labels  = read_from_file<scalar_t>(filename + "_" + mode + "_label.csv");
+  HSSOptions<scalar_t> opts;
+  opts.set_verbose(false);
+  opts.set_from_command_line(argc, argv);
+  // if (c.is_root() && opts.verbose())
+  //   opts.describe_options();
 
-  size_t n = training.size() / d;
-  size_t m = testing.size() / d;
-  if (c.is_root())
-    cout << "# training dataset = " << n << " x " << d << endl
-         << "# testing dataset  = " << m << " x " << d << endl << endl;
+  // auto training     = read_from_file<scalar_t>(filename + "_train.csv");
+  // auto testing      = read_from_file<scalar_t>(filename + "_" + mode + ".csv");
+  // auto train_labels = read_from_file<scalar_t>(filename + "_train_label.csv");
+  // auto test_labels  = read_from_file<scalar_t>(filename + "_" + mode + "_label.csv");
 
-  DenseMatrixWrapper<scalar_t>
-    training_points(d, n, training.data(), d),
-    test_points(d, m, testing.data(), d);
+  // size_t n = training.size() / d;
+  // size_t m = testing.size() / d;
+  // if (c.is_root())
+  //   cout << "# training dataset = " << n << " x " << d << endl
+  //        << "# testing dataset  = " << m << " x " << d << endl << endl;
 
-  auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
+  // DenseMatrixWrapper<scalar_t>
+  //   training_points(d, n, training.data(), d),
+  //   test_points(d, m, testing.data(), d);
+
+  // auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
+  // {
+  //   BLACSGrid g(c);
+  //   timer.start();
+  //   auto weights = K->fit_HSS(g, train_labels, opts);
+  //   if (c.is_root()) cout << "# fit_HSS took " << timer.elapsed() << endl;
+  // }
+
   {
-    HSSOptions<scalar_t> opts;
-    opts.set_verbose(false);
-    opts.set_from_command_line(argc, argv);
-    if (c.is_root() && opts.verbose())
-      opts.describe_options();
-
-    BLACSGrid g(c);
-    timer.start();
-    auto weights = K->fit_HSS(g, train_labels, opts);
-    if (c.is_root()) cout << "# fit_HSS took " << timer.elapsed() << endl;
-    // if (c.is_root()) cout << endl << "# HSS prediction start..." << endl;
-    // auto prediction = K->predict(test_points, weights);
-    // if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
-    // check(prediction);
+  print_dense_counter_MPI("p0", c);
+  DenseMatrix<scalar_t> mat1(1000,1000); //4MB
+  DenseMatrix<scalar_t> mat2(1000,1000); //4MB
+  DenseMatrix<scalar_t> mat3(1000,1000); //4MB
+  print_dense_counter_MPI("p1", c);      // mem 24 peak 24
+  {
+  DenseMatrix<scalar_t> mat3(1000,1000); //4MB
+  print_dense_counter_MPI("p2", c);      // mem 32 peak 32
   }
+  print_dense_counter_MPI("p3", c);      // mem 24 peak 32
+  }
+  print_dense_counter_MPI("p4", c);      // mem 0 peak 32
 
   if (c.is_root())
     std::cout << "# total_time: "
