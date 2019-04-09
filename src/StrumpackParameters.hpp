@@ -106,99 +106,105 @@ namespace strumpack { // these are all global variables
   } //end namespace params
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
-#if defined(STRUMPACK_COUNT_FLOPS)
-#define STRUMPACK_FLOPS(n)                      \
-  strumpack::params::flops += n;
-#define STRUMPACK_BYTES(n)                      \
-  strumpack::params::bytes += n;
-#define STRUMPACK_ID_FLOPS(n)                   \
-  strumpack::params::ID_flops += n;
-#define STRUMPACK_QR_FLOPS(n)                   \
-  strumpack::params::QR_flops += n;
-#define STRUMPACK_ORTHO_FLOPS(n)                \
-  strumpack::params::ortho_flops += n;
-#define STRUMPACK_REDUCE_SAMPLE_FLOPS(n)        \
-  strumpack::params::reduce_sample_flops += n;
-#define STRUMPACK_UPDATE_SAMPLE_FLOPS(n)        \
-  strumpack::params::update_sample_flops += n;
-#define STRUMPACK_RANDOM_FLOPS(n)               \
-  strumpack::params::random_flops += n;
-#define STRUMPACK_SPARSE_SAMPLE_FLOPS(n)        \
-  strumpack::params::sparse_sample_flops += n;
-#define STRUMPACK_FULL_RANK_FLOPS(n)            \
-  strumpack::params::full_rank_flops += n;
-#define STRUMPACK_EXTRACTION_FLOPS(n)           \
-  strumpack::params::extraction_flops += n;
-#define STRUMPACK_ULV_FACTOR_FLOPS(n)           \
-  strumpack::params::ULV_factor_flops += n;
-#define STRUMPACK_SCHUR_FLOPS(n)                \
-  strumpack::params::schur_flops += n;
-#define STRUMPACK_CB_SAMPLE_FLOPS(n)            \
-  strumpack::params::CB_sample_flops += n;
-#define STRUMPACK_HSS_SOLVE_FLOPS(n)            \
-  strumpack::params::hss_solve_flops += n;
 
-#define STRUMPACK_HODLR_F11_FILL_FLOPS(n)       \
-  strumpack::params::f11_fill_flops += n;
-#define STRUMPACK_HODLR_F12_FILL_FLOPS(n)       \
-  strumpack::params::f12_fill_flops += n
-#define STRUMPACK_HODLR_F21_FILL_FLOPS(n)       \
-  strumpack::params::f21_fill_flops += n
-#define STRUMPACK_HODLR_F22_FILL_FLOPS(n)       \
-  strumpack::params::f22_fill_flops += n
+  #if defined(STRUMPACK_COUNT_FLOPS)
+    #define STRUMPACK_FLOPS(n)                      \
+      strumpack::params::flops += n;
+    #define STRUMPACK_BYTES(n)                      \
+      strumpack::params::bytes += n;
+    #define STRUMPACK_ID_FLOPS(n)                   \
+      strumpack::params::ID_flops += n;
+    #define STRUMPACK_QR_FLOPS(n)                   \
+      strumpack::params::QR_flops += n;
+    #define STRUMPACK_ORTHO_FLOPS(n)                \
+      strumpack::params::ortho_flops += n;
+    #define STRUMPACK_REDUCE_SAMPLE_FLOPS(n)        \
+      strumpack::params::reduce_sample_flops += n;
+    #define STRUMPACK_UPDATE_SAMPLE_FLOPS(n)        \
+      strumpack::params::update_sample_flops += n;
+    #define STRUMPACK_RANDOM_FLOPS(n)               \
+      strumpack::params::random_flops += n;
+    #define STRUMPACK_SPARSE_SAMPLE_FLOPS(n)        \
+      strumpack::params::sparse_sample_flops += n;
+    #define STRUMPACK_FULL_RANK_FLOPS(n)            \
+      strumpack::params::full_rank_flops += n;
+    #define STRUMPACK_EXTRACTION_FLOPS(n)           \
+      strumpack::params::extraction_flops += n;
+    #define STRUMPACK_ULV_FACTOR_FLOPS(n)           \
+      strumpack::params::ULV_factor_flops += n;
+    #define STRUMPACK_SCHUR_FLOPS(n)                \
+      strumpack::params::schur_flops += n;
+    #define STRUMPACK_CB_SAMPLE_FLOPS(n)            \
+      strumpack::params::CB_sample_flops += n;
+    #define STRUMPACK_HSS_SOLVE_FLOPS(n)            \
+      strumpack::params::hss_solve_flops += n;
 
-#define STRUMPACK_HODLR_F21_MULT_FLOPS(n)       \
-  strumpack::params::f21_mult_flops += n
-#define STRUMPACK_HODLR_INVF11_MULT_FLOPS(n)    \
-  strumpack::params::invf11_mult_flops += n
-#define STRUMPACK_HODLR_F12_MULT_FLOPS(n)       \
-  strumpack::params::f12_mult_flops += n
+    #define STRUMPACK_HODLR_F11_FILL_FLOPS(n)       \
+      strumpack::params::f11_fill_flops += n;
+    #define STRUMPACK_HODLR_F12_FILL_FLOPS(n)       \
+      strumpack::params::f12_fill_flops += n
+    #define STRUMPACK_HODLR_F21_FILL_FLOPS(n)       \
+      strumpack::params::f21_fill_flops += n
+    #define STRUMPACK_HODLR_F22_FILL_FLOPS(n)       \
+      strumpack::params::f22_fill_flops += n
 
-#define STRUMPACK_DENSE_ADD_MEM(n)                                  \
-  strumpack::params::dense_counter += n;                            \
-  strumpack::params::peak_dense_counter =                           \
-    (long long int) std::max(strumpack::params::peak_dense_counter, \
-    strumpack::params::dense_counter);
-#define STRUMPACK_DENSE_SUB_MEM(n)              \
-  strumpack::params::dense_counter -= n;
+    #define STRUMPACK_HODLR_F21_MULT_FLOPS(n)       \
+      strumpack::params::f21_mult_flops += n
+    #define STRUMPACK_HODLR_INVF11_MULT_FLOPS(n)    \
+      strumpack::params::invf11_mult_flops += n
+    #define STRUMPACK_HODLR_F12_MULT_FLOPS(n)       \
+      strumpack::params::f12_mult_flops += n
 
-#define STRUMPACK_DENSE_ADD_MEM_MPI(n)                                  \
-  strumpack::params::dense_counter_mpi += n;                            \
-  strumpack::params::peak_dense_counter_mpi =                           \
-    (long long int) std::max(strumpack::params::peak_dense_counter_mpi, \
-    strumpack::params::dense_counter_mpi);
-#define STRUMPACK_DENSE_SUB_MEM_MPI(n)              \
-  strumpack::params::dense_counter_mpi -= n;
+    #define STRUMPACK_DENSE_ADD_MEM(n)                                  \
+      strumpack::params::dense_counter += n;                            \
+      strumpack::params::peak_dense_counter =                           \
+        (long long int) std::max(strumpack::params::peak_dense_counter, \
+        strumpack::params::dense_counter);
+    #define STRUMPACK_DENSE_SUB_MEM(n)              \
+      strumpack::params::dense_counter -= n;
 
-#else
-#define STRUMPACK_FLOPS(n) void(0);
-#define STRUMPACK_BYTES(n) void(0);
-#define STRUMPACK_ID_FLOPS(n) void(0);
-#define STRUMPACK_QR_FLOPS(n) void(0);
-#define STRUMPACK_ORTHO_FLOPS(n) void(0);
-#define STRUMPACK_REDUCE_SAMPLE_FLOPS(n) void(0);
-#define STRUMPACK_UPDATE_SAMPLE_FLOPS(n) void(0);
-#define STRUMPACK_RANDOM_FLOPS(n) void(0);
-#define STRUMPACK_SPARSE_SAMPLE_FLOPS(n) void(0);
-#define STRUMPACK_FULL_RANK_FLOPS(n) void(0);
-#define STRUMPACK_EXTRACTION_FLOPS(n) void(0);
-#define STRUMPACK_ULV_FACTOR_FLOPS(n) void(0);
-#define STRUMPACK_SCHUR_FLOPS(n) void(0);
-#define STRUMPACK_CB_SAMPLE_FLOPS(n) void(0);
-#define STRUMPACK_HSS_SOLVE_FLOPS(n) void(0);
+    #define STRUMPACK_DENSE_ADD_MEM_MPI(n)                                  \
+      strumpack::params::dense_counter_mpi += n;                            \
+      strumpack::params::peak_dense_counter_mpi =                           \
+        (long long int) std::max(strumpack::params::peak_dense_counter_mpi, \
+        strumpack::params::dense_counter_mpi);
+    #define STRUMPACK_DENSE_SUB_MEM_MPI(n)              \
+      strumpack::params::dense_counter_mpi -= n;
 
-#define STRUMPACK_HODLR_F11_FILL_FLOPS(n) void(0);
-#define STRUMPACK_HODLR_F12_FILL_FLOPS(n) void(0);
-#define STRUMPACK_HODLR_F21_FILL_FLOPS(n) void(0);
-#define STRUMPACK_HODLR_F22_FILL_FLOPS(n) void(0);
+  #else
 
-#define STRUMPACK_HODLR_F21_MULT_FLOPS(n) void(0);
-#define STRUMPACK_HODLR_INVF11_MULT_FLOPS(n) void(0);
-#define STRUMPACK_HODLR_F12_FILL_FLOPS(n) void(0);
+    #define STRUMPACK_FLOPS(n) void(0);
+    #define STRUMPACK_BYTES(n) void(0);
+    #define STRUMPACK_ID_FLOPS(n) void(0);
+    #define STRUMPACK_QR_FLOPS(n) void(0);
+    #define STRUMPACK_ORTHO_FLOPS(n) void(0);
+    #define STRUMPACK_REDUCE_SAMPLE_FLOPS(n) void(0);
+    #define STRUMPACK_UPDATE_SAMPLE_FLOPS(n) void(0);
+    #define STRUMPACK_RANDOM_FLOPS(n) void(0);
+    #define STRUMPACK_SPARSE_SAMPLE_FLOPS(n) void(0);
+    #define STRUMPACK_FULL_RANK_FLOPS(n) void(0);
+    #define STRUMPACK_EXTRACTION_FLOPS(n) void(0);
+    #define STRUMPACK_ULV_FACTOR_FLOPS(n) void(0);
+    #define STRUMPACK_SCHUR_FLOPS(n) void(0);
+    #define STRUMPACK_CB_SAMPLE_FLOPS(n) void(0);
+    #define STRUMPACK_HSS_SOLVE_FLOPS(n) void(0);
 
-#define STRUMPACK_DENSE_ADD_MEM(n) void(0);
-#define STRUMPACK_DENSE_SUB_MEM(n) void(0);
-#endif
+    #define STRUMPACK_HODLR_F11_FILL_FLOPS(n) void(0);
+    #define STRUMPACK_HODLR_F12_FILL_FLOPS(n) void(0);
+    #define STRUMPACK_HODLR_F21_FILL_FLOPS(n) void(0);
+    #define STRUMPACK_HODLR_F22_FILL_FLOPS(n) void(0);
+
+    #define STRUMPACK_HODLR_F21_MULT_FLOPS(n) void(0);
+    #define STRUMPACK_HODLR_INVF11_MULT_FLOPS(n) void(0);
+    #define STRUMPACK_HODLR_F12_FILL_FLOPS(n) void(0);
+
+    #define STRUMPACK_DENSE_ADD_MEM(n) void(0);
+    #define STRUMPACK_DENSE_SUB_MEM(n) void(0);
+    #define STRUMPACK_DENSE_ADD_MEM_MPI(n) void(0);
+    #define STRUMPACK_DENSE_SUB_MEM_MPI(n) void(0);
+
+  #endif
+
 #endif // DOXYGEN_SHOULD_SKIP_THIS
 
 } //end namespace strumpack
