@@ -75,6 +75,8 @@ namespace strumpack {
     std::atomic<long long int> bytes(0);
     std::atomic<long long int> dense_counter(0);
     std::atomic<long long int> peak_dense_counter(0);
+    std::atomic<long long int> dense_counter_mpi(0);
+    std::atomic<long long int> peak_dense_counter_mpi(0);
 
     std::atomic<long long int> CB_sample_flops(0);
     std::atomic<long long int> sparse_sample_flops(0);

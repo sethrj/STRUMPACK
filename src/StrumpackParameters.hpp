@@ -74,6 +74,8 @@ namespace strumpack { // these are all global variables
     extern std::atomic<long long int> bytes;
     extern std::atomic<long long int> dense_counter;
     extern std::atomic<long long int> peak_dense_counter;
+    extern std::atomic<long long int> dense_counter_mpi;
+    extern std::atomic<long long int> peak_dense_counter_mpi;
 
     extern std::atomic<long long int> CB_sample_flops;
     extern std::atomic<long long int> sparse_sample_flops;
@@ -157,9 +159,16 @@ namespace strumpack { // these are all global variables
   strumpack::params::peak_dense_counter =                           \
     (long long int) std::max(strumpack::params::peak_dense_counter, \
     strumpack::params::dense_counter);
-
 #define STRUMPACK_DENSE_SUB_MEM(n)              \
   strumpack::params::dense_counter -= n;
+
+#define STRUMPACK_DENSE_ADD_MEM_MPI(n)                                  \
+  strumpack::params::dense_counter_mpi += n;                            \
+  strumpack::params::peak_dense_counter_mpi =                           \
+    (long long int) std::max(strumpack::params::peak_dense_counter_mpi, \
+    strumpack::params::dense_counter_mpi);
+#define STRUMPACK_DENSE_SUB_MEM_MPI(n)              \
+  strumpack::params::dense_counter_mpi -= n;
 
 #else
 #define STRUMPACK_FLOPS(n) void(0);

@@ -76,7 +76,9 @@ namespace strumpack {
     DistributedMatrix(const BLACSGrid* g, int M, int N, int MB, int NB);
     DistributedMatrix(const BLACSGrid* g, int desc[9]);
 
+    // Copy constructor
     DistributedMatrix(const DistributedMatrix<scalar_t>& m);
+    // Move constructor
     DistributedMatrix(DistributedMatrix<scalar_t>&& m);
     virtual ~DistributedMatrix();
 
@@ -567,10 +569,12 @@ namespace strumpack {
     rlo--; rhi--; clo--; chi--;
   }
 
+  // Default constructor
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix()
     : DistributedMatrix(nullptr, 0, 0, default_MB, default_NB) {
   }
 
+  // Constructor 1: Counter of DenseMatrix, memory already counted.
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
   (const BLACSGrid* g, const DenseMatrix<scalar_t>& m)
     : DistributedMatrix(g, m.rows(), m.cols(), default_MB, default_NB) {
@@ -578,23 +582,14 @@ namespace strumpack {
       std::cout << "ERROR: creating DistM_t from DenseM_t only possible on 1 process!" << std::endl;
       abort();
     }
+    // std::cout << "=======> Constructor 1 (Calls Constructor 6.)"
+    // <<  std::endl;
     for (int c=0; c<lcols_; c++)
       for (int r=0; r<lrows_; r++)
         operator()(r, c) = m(r, c);
   }
 
-  template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
-  (const BLACSGrid* g, DenseMatrixWrapper<scalar_t>&& m)
-    : DistributedMatrix(g, m.rows(), m.cols(), default_MB, default_NB) {
-    if (nprows() != 1 || npcols() != 1) {
-      std::cout << "ERROR: creating DistM_t from DenseM_t only possible on 1 process!" << std::endl;
-      abort();
-    }
-    for (int c=0; c<lcols_; c++)
-      for (int r=0; r<lrows_; r++)
-        operator()(r, c) = m(r, c);
-  }
-
+  // Constructor 2
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
   (const BLACSGrid* g, DenseMatrix<scalar_t>&& m) : grid_(g) {
     assert(g->P() == 1);
@@ -612,6 +607,8 @@ namespace strumpack {
       m.data_ = nullptr;
     } else {
       data_ = new scalar_t[lrows_*lcols_];
+      // std::cout << "=======> Constructor 2: (Move and calls constructor 6)"
+      //           <<  std::endl;
       for (int c=0; c<lcols_; c++)
         for (int r=0; r<lrows_; r++)
           operator()(r, c) = m(r, c);
@@ -620,35 +617,64 @@ namespace strumpack {
     m.data_ = nullptr;
   }
 
+  // Constructor 3: Calls constructor 6
+  template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
+  (const BLACSGrid* g, DenseMatrixWrapper<scalar_t>&& m)
+    : DistributedMatrix(g, m.rows(), m.cols(), default_MB, default_NB) {
+    // std::cout << "=======> Constructor 3 (Move and calls constructor 6)"
+    //           <<  std::endl;
+    if (nprows() != 1 || npcols() != 1) {
+      std::cout << "ERROR: creating DistM_t from DenseM_t only possible on 1 process!" << std::endl;
+      abort();
+    }
+    for (int c=0; c<lcols_; c++)
+      for (int r=0; r<lrows_; r++)
+        operator()(r, c) = m(r, c);
+  }
+
+  // Constructor 4: Calls constructor 6 and does a strumpack::copy
+  // See template<typename scalar_t> void copy
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
   (const BLACSGrid* g, int M, int N, const DistributedMatrix<scalar_t>& m,
    int context_all)
     : DistributedMatrix(g, M, N, default_MB, default_NB) {
+    std::cout << "=======> Constructor 4 (Calls Constructor 6. Plus a copy())"
+              <<  std::endl;
     strumpack::copy(M, N, m, 0, 0, *this, 0, 0, context_all);
   }
 
+  // Copy Constructor
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
   (const DistributedMatrix<scalar_t>& m)
     : grid_(m.grid()), lrows_(m.lrows()), lcols_(m.lcols()) {
+    // std::cout << "=======> Copy Constructor"
+    //       << "[" << lrows_ << "," << lcols_ << "]"
+    //       << " = " << (sizeof(scalar_t)*lrows_*lcols_)/1e6
+    //       <<  std::endl;
     std::copy(m.desc_, m.desc_+9, desc_);
     data_ = new scalar_t[lrows_*lcols_];
+    STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
     std::copy(m.data_, m.data_+lrows_*lcols_, data_);
   }
 
+  // Move Constructor
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
   (DistributedMatrix<scalar_t>&& m)
     : grid_(m.grid()), lrows_(m.lrows()), lcols_(m.lcols()) {
+    std::cout << "=======> Move Constructor" << std::endl;
     std::copy(m.desc(), m.desc()+9, desc_);
     data_ = m.data();
     m.data_ = nullptr;
   }
 
+  // Constructor 5: Calls Constructor 6
   template<typename scalar_t>
   DistributedMatrix<scalar_t>::DistributedMatrix
   (const BLACSGrid* g, int M, int N)
     : DistributedMatrix(g, M, N, default_MB, default_NB) {
   }
 
+  // Constructor 6
   template<typename scalar_t> DistributedMatrix<scalar_t>::DistributedMatrix
   (const BLACSGrid* g, int M, int N, int MB, int NB) : grid_(g) {
     assert(M >= 0 && N >= 0 && MB >= 0 && NB >= 0);
@@ -663,6 +689,11 @@ namespace strumpack {
       lrows_ = scalapack::numroc(M, MB, prow(), 0, nprows());
       lcols_ = scalapack::numroc(N, NB, pcol(), 0, npcols());
       data_ = new scalar_t[lrows_*lcols_];
+      STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
+      // std::cout << "=======> DistM_t Constructor 6 "
+      //           << "[" << lrows_ << "," << lcols_ << "]"
+      //           << " = " << (sizeof(scalar_t)*lrows_*lcols_)/1e6
+      //           <<  std::endl;
       if (scalapack::descinit
           (desc_, M, N, MB, NB, 0, 0, ctxt(), std::max(lrows_,1))) {
         std::cerr << " ERROR: Could not create DistributedMatrix descriptor!"
@@ -672,6 +703,7 @@ namespace strumpack {
     }
   }
 
+  // Constructor 7
   template<typename scalar_t>
   DistributedMatrix<scalar_t>::DistributedMatrix
   (const BLACSGrid* g, int desc[9]) : grid_(g) {
@@ -683,23 +715,36 @@ namespace strumpack {
       lrows_ = scalapack::numroc(desc_[2], desc_[4], prow(), desc_[6], nprows());
       lcols_ = scalapack::numroc(desc_[3], desc_[5], pcol(), desc_[7], npcols());
       assert(lrows_==desc_[8]);
-      if (lrows_ && lcols_) data_ = new scalar_t[lrows_*lcols_];
+      if (lrows_ && lcols_){
+        data_ = new scalar_t[lrows_*lcols_];
+        // std::cout << "=======> Constructor 7"
+        //           <<  std::endl;
+        STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
+      }
       else data_ = nullptr;
     }
   }
 
+  // Destructor
   template<typename scalar_t>
   DistributedMatrix<scalar_t>::~DistributedMatrix() {
     clear();
   }
 
+  // Operator overload for copy
   template<typename scalar_t> DistributedMatrix<scalar_t>&
   DistributedMatrix<scalar_t>::operator=
   (const DistributedMatrix<scalar_t>& m) {
     if (lrows_ != m.lrows_ || lcols_ != m.lcols_) {
+      // if ( data_ != nullptr ) STRUMPACK_DENSE_SUB_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
       lrows_ = m.lrows_;  lcols_ = m.lcols_;
       delete[] data_;
       data_ = new scalar_t[lrows_*lcols_];
+      STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
+      // std::cout << "=======> Operator overload for copy"
+      //           << "[" << lrows_ << "," << lcols_ << "]"
+      //           << " = " << (sizeof(scalar_t)*lrows_*lcols_)/1e6
+      //           <<  std::endl;
     }
     grid_ = m.grid();
     std::copy(m.data_, m.data_+lrows_*lcols_, data_);
@@ -707,9 +752,14 @@ namespace strumpack {
     return *this;
   }
 
+  // Operator overload for move
   template<typename scalar_t> DistributedMatrix<scalar_t>&
   DistributedMatrix<scalar_t>::operator=(DistributedMatrix<scalar_t>&& m) {
     grid_ = m.grid();
+    // std::cout << "=======> Operator overload for move"
+    //           << "[" << m.lrows_ << "," << m.lcols_ << "]"
+    //           << " = " << (sizeof(scalar_t)*m.lrows_*m.lcols_)/1e6
+    //           <<  std::endl;
     lrows_ = m.lrows_;  lcols_ = m.lcols_;
     std::copy(m.desc_, m.desc_+9, desc_);
     delete[] data_;
@@ -725,7 +775,15 @@ namespace strumpack {
     chi = lcols();
   }
 
+  // Destructor calls this
   template<typename scalar_t> void DistributedMatrix<scalar_t>::clear() {
+    if ( data_ != nullptr ) {
+      // std::cout << "=======> CLEARED"
+      //     << "[" << lrows_ << "," << lcols_ << "]"
+      //     << " = " << (sizeof(scalar_t)*lrows_*lcols_)/1e6
+      //     <<  std::endl;
+      STRUMPACK_DENSE_SUB_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
+    }
     delete[] data_;
     data_ = nullptr;
     lrows_ = lcols_ = 0;

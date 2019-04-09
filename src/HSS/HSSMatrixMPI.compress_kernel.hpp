@@ -297,8 +297,9 @@ namespace strumpack {
       int P1active = this->_ch[1]->Pactive();
       std::vector<MPIRequest> sreq;
       std::vector<std::size_t> sbuf0, sbuf1;
-      assert(sizeof(typename decltype(w.ids_scores)::value_type::second_type)
-             == sizeof(std::size_t));
+      // TODO: Enable this assertion
+      // assert(sizeof(typename decltype(w.ids_scores)::value_type::second_type)
+      //        == sizeof(std::size_t));
       if (rank < P0active) {
         if (rank < (P-P0active)) {
           // I'm one of the first P-P0active processes that are active

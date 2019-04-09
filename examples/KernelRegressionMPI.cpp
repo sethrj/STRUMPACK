@@ -42,6 +42,68 @@ using namespace strumpack;
 using namespace strumpack::HSS;
 using namespace strumpack::kernel;
 
+void print_dense_counter_MPI(std::string description, MPIComm c){
+#if defined(STRUMPACK_COUNT_FLOPS)
+
+  std::cout << "### "
+            << std::setw(15)
+            << description
+            << " "
+            << "dense_mpi_MB = "
+            << std::setw(10)
+            << std::left
+            << (params::dense_counter_mpi)/1.e6 + (params::dense_counter)/1.e6
+            << "    "
+            << "peak_dense_mpi_MB = "
+            << std::setw(10)
+            << std::left
+            << (params::peak_dense_counter_mpi)/1.e6 + (params::peak_dense_counter)/1.e6
+            << " "
+            << "###"
+            << " r"
+            << c.rank()
+            << std::endl;
+  return;
+  // 1. Reduce dense counters
+  std::array<long long int, 2> red_dense_counter = {
+    params::dense_counter.load(),
+    params::peak_dense_counter.load()
+  };
+  c.reduce(red_dense_counter.data(), red_dense_counter.size(), MPI_SUM);
+
+  // 2. Reduce dense_MPI counters
+  std::array<long long int, 2> red_dense_counter_mpi = {
+    params::dense_counter_mpi.load(),
+    params::peak_dense_counter_mpi.load()
+  };
+  c.reduce(red_dense_counter_mpi.data(), red_dense_counter_mpi.size(), MPI_SUM);
+
+  // 3. Print
+  if (c.is_root())
+    std::cout << "### "
+            << std::left
+            << std::setw(15)
+            << description
+            << " "
+            << "dense_mpi_MB = "
+            << std::setw(10)
+            << std::left
+            << (red_dense_counter_mpi[0])/1.e6 + (red_dense_counter[0])/1.e6
+            << "    "
+            << "peak_dense_mpi_MB = "
+            << std::setw(10)
+            << std::left
+            << (red_dense_counter_mpi[1])/1.e6 + (red_dense_counter[1])/1.e6
+            << " "
+            << "###  MPI COMPRESSION_REDUCEs"
+            << std::endl;
+
+  // 4. Set reduced counters to zero
+  std::fill(red_dense_counter.begin(),red_dense_counter.end(),0);
+  std::fill(red_dense_counter_mpi.begin(),red_dense_counter_mpi.end(),0);
+#endif
+}
+
 template<typename scalar_t> vector<scalar_t>
 read_from_file(string filename) {
   vector<scalar_t> data;
@@ -105,24 +167,8 @@ int main(int argc, char *argv[]) {
     training_points(d, n, training.data(), d),
     test_points(d, m, testing.data(), d);
 
-  // auto check = [&](const std::vector<scalar_t>& prediction) {
-  //   // compute accuracy score of prediction
-  //   if (c.is_root()) {
-  //     size_t incorrect_quant = 0;
-  //     for (size_t i=0; i<m; i++)
-  //       if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-  //           (prediction[i] < 0 && test_labels[i] >= 0))
-  //         incorrect_quant++;
-  //     cout << "# prediction score: "
-  //     << (float(m - incorrect_quant) / m) * 100. << "%" << endl
-  //     << "# c-err: "
-  //     << (float(incorrect_quant) / m) * 100. << "%"
-  //     << endl;
-  //   }
-  // };
 
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
-
   {
     HSSOptions<scalar_t> opts;
     opts.set_verbose(false);
@@ -132,29 +178,33 @@ int main(int argc, char *argv[]) {
 
     BLACSGrid g(c);
     timer.start();
+
     auto weights = K->fit_HSS(g, train_labels, opts);
     if (c.is_root()) cout << "# fit_HSS took " << timer.elapsed() << endl;
+
+    // Prediction
+    // auto check = [&](const std::vector<scalar_t>& prediction) {
+    //   // compute accuracy score of prediction
+    //   if (c.is_root()) {
+    //     size_t incorrect_quant = 0;
+    //     for (size_t i=0; i<m; i++)
+    //       if ((prediction[i] >= 0 && test_labels[i] < 0) ||
+    //           (prediction[i] < 0 && test_labels[i] >= 0))
+    //         incorrect_quant++;
+    //     cout << "# prediction score: "
+    //     << (float(m - incorrect_quant) / m) * 100. << "%" << endl
+    //     << "# c-err: "
+    //     << (float(incorrect_quant) / m) * 100. << "%"
+    //     << endl;
+    //   }
+    // };
     // if (c.is_root()) cout << endl << "# HSS prediction start..." << endl;
     // auto prediction = K->predict(test_points, weights);
     // if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
     // check(prediction);
   }
 
-// #if defined(STRUMPACK_USE_HODLRBF)
-//   {
-//     HODLR::HODLROptions<scalar_t> opts;
-//     opts.set_verbose(true);
-//     opts.set_from_command_line(argc, argv);
-//     if (c.is_root()) opts.describe_options();
-
-//     auto weights = K->fit_HODLR(c, train_labels, opts);
-//     if (c.is_root()) cout << endl << "# HODLR prediction start..." << endl;
-//     timer.start();
-//     auto prediction = K->predict(test_points, weights);
-//     if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
-//     check(prediction);
-//   }
-// #endif
+  print_dense_counter_MPI("AFTER FIT", c);
 
   if (c.is_root())
     std::cout << "# total_time: "
