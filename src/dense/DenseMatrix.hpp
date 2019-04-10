@@ -1121,10 +1121,11 @@ namespace strumpack {
     return I;
   }
 
-
+  // Constructor 1
   template<typename scalar_t> DenseMatrix<scalar_t>::DenseMatrix()
     : data_(nullptr), rows_(0), cols_(0), ld_(1) { }
 
+  // Constructor 2
   template<typename scalar_t> DenseMatrix<scalar_t>::DenseMatrix
   (std::size_t m, std::size_t n)
     : data_(new scalar_t[m*n]), rows_(m),
@@ -1138,6 +1139,7 @@ namespace strumpack {
                 << std::endl;
   }
 
+  // Constructor 3
   template<typename scalar_t> DenseMatrix<scalar_t>::DenseMatrix
   (std::size_t m, std::size_t n, const scalar_t* D, std::size_t ld)
     : data_(new scalar_t[m*n]), rows_(m), cols_(n),
@@ -1155,6 +1157,7 @@ namespace strumpack {
         operator()(i, j) = D[i+j*ld];
   }
 
+  // Constructor 4
   template<typename scalar_t> DenseMatrix<scalar_t>::DenseMatrix
   (std::size_t m, std::size_t n, const DenseMatrix<scalar_t>& D,
    std::size_t i, std::size_t j)
@@ -1172,13 +1175,14 @@ namespace strumpack {
         operator()(_i, _j) = D(_i+i, _j+j);
   }
 
+  // Copy constructor
   template<typename scalar_t>
   DenseMatrix<scalar_t>::DenseMatrix(const DenseMatrix<scalar_t>& D)
     : data_(new scalar_t[D.rows()*D.cols()]), rows_(D.rows()),
       cols_(D.cols()), ld_(std::max(std::size_t(1), D.rows())) {
     STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
-      std::cout << "Called DenseMatrix4("
+      std::cout << "Called Copy constructor("
                 << rows_ << "," << cols_ << "), allocated "
                 << sizeof(scalar_t)*rows_*cols_/1.e6 << " MB"
                 << " dense_mem = "<< dense_mem/1.e6
@@ -1188,22 +1192,23 @@ namespace strumpack {
         operator()(i, j) = D(i, j);
   }
 
+  // Move constructor
   template<typename scalar_t>
   DenseMatrix<scalar_t>::DenseMatrix(DenseMatrix<scalar_t>&& D)
     : data_(D.data()), rows_(D.rows()), cols_(D.cols()), ld_(D.ld()) {
-    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*rows_*cols_);
+    STRUMPACK_DENSE_ADD_MEM(sizeof(scalar_t)*D.rows_*D.cols_);
     if ( print_counters )
-      std::cout << "Called DenseMatrix5("
-                <<rows_<<","<<cols_<<"), allocated "
-                << sizeof(scalar_t)*rows_*cols_/1.e6 << " MB"
-                << " dense_mem = "<< dense_mem/1.e6
-                << std::endl;
+      std::cout << "Called Move constructor["
+                << "New " << D.rows() << "," << D.cols() << "<=>"
+                << "Old " << rows_ << "," << cols_ << "]" <<std::endl;
+    STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
     D.data_ = nullptr;
     D.rows_ = 0;
     D.cols_ = 0;
     D.ld_ = 1;
   }
 
+  // Destructor
   template<typename scalar_t> DenseMatrix<scalar_t>::~DenseMatrix() {
     if ( data_ != nullptr ){
       STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
@@ -1220,6 +1225,7 @@ namespace strumpack {
     cols_ = 0;
   }
 
+  // Copy operator, expensive operation for large matrices.
   template<typename scalar_t> DenseMatrix<scalar_t>&
   DenseMatrix<scalar_t>::operator=(const DenseMatrix<scalar_t>& D) {
     if (this == &D) return *this;
@@ -1241,6 +1247,7 @@ namespace strumpack {
     return *this;
   }
 
+  // Move operator, D Matrix to be moved into this object, will be emptied.
   template<typename scalar_t> DenseMatrix<scalar_t>&
   DenseMatrix<scalar_t>::operator=(DenseMatrix<scalar_t>&& D) {
     if ( print_counters )
@@ -1338,6 +1345,7 @@ namespace strumpack {
         operator()(i,j) = (i == j) ? scalar_t(1.) : scalar_t(0.);
   }
 
+  // Clear the matrix. Resets the number of rows and columns to 0.
   template<typename scalar_t> void DenseMatrix<scalar_t>::clear() {
     STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);
     if ( print_counters )
@@ -1353,6 +1361,7 @@ namespace strumpack {
     data_ = nullptr;
   }
 
+  // Resize the matrix.
   template<typename scalar_t> void
   DenseMatrix<scalar_t>::resize(std::size_t m, std::size_t n) {
     STRUMPACK_DENSE_SUB_MEM(sizeof(scalar_t)*rows_*cols_);

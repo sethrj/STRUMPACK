@@ -83,7 +83,8 @@ namespace strumpack {
         scores.read_from_binary_file(scores_filename);
         if (Comm().is_root())
             std::cout << "# Reading ANN files took "
-                  << timer_ann.elapsed() << std::endl;
+                  << timer_ann.elapsed() << std::endl
+                  << "# Compression started..." << std::endl;
         // Calling compression routine
         WorkCompressMPIANN<scalar_t> w;
           compress_recursive_ann(ann, scores, Aelemw, w, opts, grid_local());

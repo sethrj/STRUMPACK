@@ -65,10 +65,15 @@ namespace strumpack {
     int desc_[9];
 
   public:
+    // Default constructor
     DistributedMatrix();
+
+    // Constructors from 1 MPI rank to a grid()
     DistributedMatrix(const BLACSGrid* g, const DenseMatrix<scalar_t>& m);
     DistributedMatrix(const BLACSGrid* g, DenseMatrix<scalar_t>&& m);
     DistributedMatrix(const BLACSGrid* g, DenseMatrixWrapper<scalar_t>&& m);
+
+    // Constructors on several MPI ranks on a grid()
     DistributedMatrix(const BLACSGrid* g, int M, int N,
                       const DistributedMatrix<scalar_t>& m,
                       int context_all);
@@ -80,8 +85,11 @@ namespace strumpack {
     DistributedMatrix(const DistributedMatrix<scalar_t>& m);
     // Move constructor
     DistributedMatrix(DistributedMatrix<scalar_t>&& m);
+
+    // Destructor
     virtual ~DistributedMatrix();
 
+    // Assignment operators
     DistributedMatrix<scalar_t>&
     operator=(const DistributedMatrix<scalar_t>& m);
     DistributedMatrix<scalar_t>&

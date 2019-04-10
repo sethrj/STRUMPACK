@@ -278,13 +278,13 @@ namespace strumpack {
       //     HSSd.normF() / Kdense.normF() << std::endl;
       // }
 
-      if (verb)
-        std::cout << "# factorization started..." << std::endl;
-      timer.start();
-      auto ULV = H.factor();
-      if (verb)
-        std::cout << "# factorization time = "
-                  << timer.elapsed() << std::endl;
+      // if (verb)
+      //   std::cout << "# factorization started..." << std::endl;
+      // timer.start();
+      // auto ULV = H.factor();
+      // if (verb)
+      //   std::cout << "# factorization time = "
+      //             << timer.elapsed() << std::endl;
 
       // if (verb)
       //   std::cout << "# solve started..." << std::endl;
