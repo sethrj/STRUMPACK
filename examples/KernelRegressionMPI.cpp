@@ -49,17 +49,15 @@ void print_dense_counter_MPI(std::string description, MPIComm c){
             << std::setw(15)
             << description
             << " "
-            << "dense_mpi_MB = "
+            << "dense_counter_mpi_MB = "
             << std::setw(10)
             << std::left
-            << (params::dense_counter_mpi)/1.e6 + (params::dense_counter)/1.e6
+            << (params::dense_counter)/1.e6 + (params::dense_counter_mpi)/1.e6
             << "    "
-            << "peak_dense_mpi_MB = "
+            << "peak_dense_counter_mpi_MB = "
             << std::setw(10)
             << std::left
-            << (params::peak_dense_counter_mpi)/1.e6 + (params::peak_dense_counter)/1.e6
-            << " "
-            << "###"
+            << (params::peak_dense_counter)/1.e6 + (params::peak_dense_counter_mpi)/1.e6
             << " r"
             << c.rank()
             << std::endl;
@@ -120,14 +118,12 @@ read_from_file(string filename) {
 }
 
 int main(int argc, char *argv[]) {
-  // HODLR code does not support float (yet)
   using scalar_t = float;
-
   TaskTimer timer_all("all");
   timer_all.start();
   MPI_Init(&argc, &argv);
   MPIComm c;
-
+  {
   string filename("smalltest.dat");
   int d = 2;
   scalar_t h = 3.;
@@ -204,11 +200,13 @@ int main(int argc, char *argv[]) {
     // check(prediction);
   }
 
-  print_dense_counter_MPI("AFTER FIT", c);
+  // print_dense_counter_MPI("AFTER FIT", c);
 
   if (c.is_root())
     std::cout << "# total_time: "
       << timer_all.elapsed() << std::endl << std::endl;
+  }
+  print_dense_counter_MPI("SANITY counter", c);
 
   MPI_Finalize();
   return 0;

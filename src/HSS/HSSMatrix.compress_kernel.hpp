@@ -75,6 +75,7 @@ namespace strumpack {
         std::cout << "# Reading ANN files took "
                   << timer.elapsed() << std::endl;
         // Calling compression routine
+        std::cout << "# Compression started..." << std::endl;
         WorkCompressANN<scalar_t> w;
         #pragma omp parallel if(!omp_in_parallel())
         #pragma omp single nowait

@@ -70,20 +70,19 @@ namespace strumpack {
       DenseMW_t B(1, n(), labels.data(), 1);
       B.lapmt(perm, true);
       perm.clear();
-      if (opts.verbose()) {
-        // draw(H,"plot_");
-        if (H.is_compressed())
-          std::cout << "# created HSS matrix of dimension "
-                    << H.rows() << " x " << H.cols()
-                    << " with " << H.levels() << " levels" << std::endl
-                    << "# compression succeeded!" << std::endl;
-        else std::cout << "# compression failed!!!" << std::endl;
-        std::cout << "# rank_H = " << H.rank() << std::endl
-                  << "# HSS memory_H = "
-                  << H.memory() / 1e6 << " MB" << std::endl
-                  << "# HSS memory_counter_H = "
-                  << memory_counter / 1e6 << " MB" << std::endl;
-      }
+      // draw(H,"plot_");
+      if (H.is_compressed())
+        std::cout << "# created HSS matrix of dimension "
+                  << H.rows() << " x " << H.cols()
+                  << " with " << H.levels() << " levels" << std::endl
+                  << "# compression succeeded!" << std::endl;
+      else std::cout << "# compression failed!!!" << std::endl;
+      std::cout << "# rank_H = " << H.rank() << std::endl
+                << "# HSS memory_H = "
+                << H.memory() / 1e6 << " MB" << std::endl;
+      // std::cout << "# HSS memory_counter_H = "
+      //           << memory_counter / 1e6 << " MB" << std::endl;
+
       // // Computing error against dense matrix
       // if ( n()<= 1000 ){
       //   DenseM_t Kdense(n(),n());
@@ -99,10 +98,11 @@ namespace strumpack {
       // }
       params::print_dense_counter("AFTER COMP");
 
+
       std::cout << "# factorization started..." << std::endl;
       timer.start();
       auto ULV = H.factor();
-      if (opts.verbose())
+      if (1)
         std::cout << "# ULV_factorization_time = "
                   << timer.elapsed()
                   << std::endl
@@ -111,9 +111,7 @@ namespace strumpack {
                   << std::endl;
       params::print_dense_counter("AFTER FACT");
 
-      if (opts.verbose())
-        std::cout << "# solution started..." << std::endl;
-
+      std::cout << "# solution started..." << std::endl;
       #if ITERATIVE_REFINEMENT == 1
         DenseMW_t rhs(n(), 1, labels.data(), n());
         DenseM_t weights(rhs), residual(n(), 1);
@@ -209,7 +207,11 @@ namespace strumpack {
 
       if (opts.verbose())
         std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
-      params::print_dense_counter("AFTER SOLVE");
+      // params::print_dense_counter("AFTER SOLVE");
+
+      #if 0
+      #endif
+
       // DenseM_t weights(1, 1);
       return weights;
     }
@@ -244,7 +246,7 @@ namespace strumpack {
       DenseMW_t B(1, n(), labels.data(), 1);
       B.lapmt(perm, true);
       perm.clear();
-      if (opts.verbose()) {
+      if (1) {
         const auto lvls = H.max_levels();
         const auto rank = H.max_rank();
         const auto mem = H.total_memory();
@@ -258,8 +260,7 @@ namespace strumpack {
                       << "# compression succeeded!" << std::endl;
           else std::cout << "# compression failed!!!" << std::endl;
           std::cout << "# rank_H = " << rank << std::endl
-                    << "# HSS_memory = " << mem / 1e6
-                    << " MB " << std::endl;
+                    << "# HSS_memory_MB = " << mem / 1e6 << std::endl;
         }
       }
       // // Computing error against dense matrix
