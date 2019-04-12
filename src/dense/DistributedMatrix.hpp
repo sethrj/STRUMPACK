@@ -647,8 +647,9 @@ namespace strumpack {
   (const BLACSGrid* g, int M, int N, const DistributedMatrix<scalar_t>& m,
    int context_all)
     : DistributedMatrix(g, M, N, default_MB, default_NB) {
-    std::cout << "=======> Constructor 4 (Calls Constructor 6. Plus a copy())"
-              <<  std::endl;
+    if (PRINT_COUNTERS )
+      std::cout << "=======> Constructor 4 (Calls Constructor 6. Plus a copy())"
+                <<  std::endl;
     strumpack::copy(M, N, m, 0, 0, *this, 0, 0, context_all);
   }
 
@@ -722,8 +723,8 @@ namespace strumpack {
       assert(lrows_==desc_[8]);
       if (lrows_ && lcols_){
         data_ = new scalar_t[lrows_*lcols_];
-        // std::cout << "=======> Constructor 7"
-        //           <<  std::endl;
+          // std::cout << "=======> Constructor 7"
+          //           <<  std::endl;
         STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
       }
       else data_ = nullptr;
@@ -747,8 +748,8 @@ namespace strumpack {
       delete[] data_;
       data_ = new scalar_t[lrows_*lcols_];
       STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
-      // std::cout << "=======> Operator overload for copy"
-      //           << "[" << lrows_ << "," << lcols_ << "]"
+        // std::cout << "=======> Operator overload for copy"
+        //           << "[" << lrows_ << "," << lcols_ << "]"
       //           << " = " << (sizeof(scalar_t)*lrows_*lcols_)/1e6
       //           <<  std::endl;
     }
@@ -762,8 +763,8 @@ namespace strumpack {
   template<typename scalar_t> DistributedMatrix<scalar_t>&
   DistributedMatrix<scalar_t>::operator=(DistributedMatrix<scalar_t>&& m) {
     grid_ = m.grid();
-    // std::cout << "=======> Operator overload for move"
-    //           << "[" << m.lrows_ << "," << m.lcols_ << "]"
+      // std::cout << "=======> Operator overload for move"
+      //           << "[" << m.lrows_ << "," << m.lcols_ << "]"
     //           << " = " << (sizeof(scalar_t)*m.lrows_*m.lcols_)/1e6
     //           <<  std::endl;
     lrows_ = m.lrows_;  lcols_ = m.lcols_;

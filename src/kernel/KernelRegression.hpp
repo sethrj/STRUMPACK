@@ -279,42 +279,42 @@ namespace strumpack {
       //     HSSd.normF() / Kdense.normF() << std::endl;
       // }
 
-      // if (verb)
-      //   std::cout << "# factorization started..." << std::endl;
-      // timer.start();
-      // auto ULV = H.factor();
-      // if (verb)
-      //   std::cout << "# factorization time = "
-      //             << timer.elapsed() << std::endl;
+      if (verb)
+        std::cout << "# factorization started..." << std::endl;
+      timer.start();
+      auto ULV = H.factor();
+      if (verb)
+        std::cout << "# factorization time = "
+                  << timer.elapsed() << std::endl;
 
-      // if (verb)
-      //   std::cout << "# solve started..." << std::endl;
-      // DenseMW_t cB(n(), 1, labels.data(), n());
-      // DistM_t weights(&grid, n(), 1);
-      // weights.scatter(cB);
-      // #if ITERATIVE_REFINEMENT == 1
-      //   DistM_t rhs(weights), residual(&grid, n(), 1);
-      //   H.solve(ULV, weights);
-      //   auto rhs_normF = rhs.normF();
-      //   using real_t = typename RealType<scalar_t>::value_type;
-      //   for (int ref=0; ref<3; ref++) {
-      //     auto residual = H.apply(weights);
-      //     residual.scaled_add(scalar_t(-1.), rhs);
-      //     auto rres = residual.normF() / rhs_normF;
-      //     if (verb)
-      //       std::cout << "||H*weights - labels||_2/||labels||_2 = "
-      //                 << rres << std::endl;
-      //     if (rres < 10*blas::lamch<real_t>('E')) break;
-      //     H.solve(ULV, residual);
-      //     weights.scaled_add(scalar_t(-1.), residual);
-      //   }
-      // #else // no iterative refinement
-      //   H.solve(ULV, weights);
-      // #endif
-      // if (verb)
-      //   std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
+      if (verb)
+        std::cout << "# solve started..." << std::endl;
+      DenseMW_t cB(n(), 1, labels.data(), n());
+      DistM_t weights(&grid, n(), 1);
+      weights.scatter(cB);
+      #if ITERATIVE_REFINEMENT == 1
+        DistM_t rhs(weights), residual(&grid, n(), 1);
+        H.solve(ULV, weights);
+        auto rhs_normF = rhs.normF();
+        using real_t = typename RealType<scalar_t>::value_type;
+        for (int ref=0; ref<3; ref++) {
+          auto residual = H.apply(weights);
+          residual.scaled_add(scalar_t(-1.), rhs);
+          auto rres = residual.normF() / rhs_normF;
+          if (verb)
+            std::cout << "||H*weights - labels||_2/||labels||_2 = "
+                      << rres << std::endl;
+          if (rres < 10*blas::lamch<real_t>('E')) break;
+          H.solve(ULV, residual);
+          weights.scaled_add(scalar_t(-1.), residual);
+        }
+      #else // no iterative refinement
+        H.solve(ULV, weights);
+      #endif
+      if (verb)
+        std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
 
-      DistM_t weights(&grid, 1, 1);
+      // DistM_t weights(&grid, 1, 1);
       return weights;
     }
 
