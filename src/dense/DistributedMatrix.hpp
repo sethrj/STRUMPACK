@@ -195,6 +195,7 @@ namespace strumpack {
     void print_to_file
     (std::string name, std::string filename,
      int width=8) const;
+    void print_to_binary_file(std::string filename) const;
     void random();
     void random
     (random::RandomGeneratorBase<typename RealType<scalar_t>::
@@ -909,6 +910,18 @@ namespace strumpack {
     if (!active()) return;
     auto tmp = gather();
     if (is_master()) tmp.print_to_file(name, filename, width);
+  }
+
+  template<typename scalar_t> void
+  DistributedMatrix<scalar_t>::print_to_binary_file
+  (std::string filename) const {
+    if (!active()) return;
+    auto tmp = gather();
+    if (is_master()) {
+      std::ofstream file(filename.c_str(), std::ios::binary);
+      if (file.is_open())
+        file.write( (char*)tmp.data_, rows()*cols()*sizeof(scalar_t) );
+    }
   }
 
   template<typename scalar_t> DistributedMatrix<scalar_t>

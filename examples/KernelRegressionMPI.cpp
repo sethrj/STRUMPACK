@@ -178,6 +178,21 @@ int main(int argc, char *argv[]) {
     auto weights = K->fit_HSS(g, train_labels, opts);
     if (c.is_root()) cout << "# fit_HSS took " << timer.elapsed() << endl;
 
+    // Save weights to binary file
+    // Weights filename: "w_h_lambda_.bin", example: w_3.755000_0.700000_.bin
+    string weights_filename = opts.scratch_folder() + "/w_" + std::to_string(h)
+              + "_" + std::to_string(lambda) + "_.binweights";
+    weights.print_to_binary_file(weights_filename);
+    if (c.is_root())
+      cout << "Saved weights: " << weights_filename << std::endl;
+
+    // Read weights from binary file
+    // if (c.is_root()){
+    // DenseMatrix<scalar_t> read_weights_bin(n,1);
+    //   read_weights_bin.read_from_binary_file("/Users/gichavez/Documents/github/code_pap3_tests/profile_memory/test.bin");
+    //   read_weights_bin.print("Read weights", true, 8);
+    // }
+
     // Prediction
     // auto check = [&](const std::vector<scalar_t>& prediction) {
     //   // compute accuracy score of prediction
