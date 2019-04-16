@@ -1,4 +1,4 @@
-all: KernelRegressionMPI KernelRegression SandboxMPI
+all: KernelRegressionMPI KernelPredictionMPI KernelRegression
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@
@@ -123,12 +123,17 @@ SandboxMPI: SandboxMPI.cpp
 	$(CXX) $(LDFLAGS) SandboxMPI.o -o $@ $(LIBS)
 	$(RM) SandboxMPI.o
 
+KernelPredictionMPI: KernelPredictionMPI.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelPredictionMPI.o
+	$(CXX) $(LDFLAGS) KernelPredictionMPI.o -o $@ $(LIBS)
+	$(RM) KernelPredictionMPI.o
+
 clean:
 	rm -f *~ *o @C_EXAMPLES@ \
 	testPoisson2d testPoisson3d \
 	testMMdouble testMMdouble64 testMMfloat \
 	mtx2bin bin2mtx KernelRegression \
 	KernelRegressionNys @MPI_EXAMPLES@ \
-  Sandbox SandboxMPI
+  Sandbox SandboxMPI KernelPredictionMPI
 
 
