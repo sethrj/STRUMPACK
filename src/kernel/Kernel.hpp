@@ -166,6 +166,10 @@ namespace strumpack {
       DenseM_t fit_HSS
       (std::vector<scalar_t>& labels, const HSS::HSSOptions<scalar_t>& opts);
 
+      DenseM_t fit_HSS_multiple
+      (std::vector<scalar_t>& labels, const HSS::HSSOptions<scalar_t>& opts,
+        scalar_t lambda);
+
       /**
        * Return prediction scores for the test points, using the
        * weights computed in fit_HSS() or fit_HODLR().
@@ -178,6 +182,9 @@ namespace strumpack {
        * \see fit_HSS, fit_HODLR
        */
       std::vector<scalar_t> predict
+      (const DenseM_t& test, const DenseM_t& weights) const;
+
+      DenseMatrix<scalar_t> predict_multiple
       (const DenseM_t& test, const DenseM_t& weights) const;
 
 #if defined(STRUMPACK_USE_MPI)

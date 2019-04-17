@@ -96,8 +96,7 @@ namespace strumpack {
       //   std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
       //   HSSd.normF() / Kdense.normF() << std::endl;
       // }
-      params::print_dense_counter("AFTER COMP");
-
+      // params::print_dense_counter("AFTER COMP");
 
       std::cout << "# factorization started..." << std::endl;
       timer.start();
@@ -109,9 +108,14 @@ namespace strumpack {
                   << "# ULV_memory_MB = "
                   << ULV.memory()/1.e6
                   << std::endl;
-      params::print_dense_counter("AFTER FACT");
+      // params::print_dense_counter("AFTER FACT");
+
 
       std::cout << "# solution started..." << std::endl;
+      DenseM_t weights(n(), 1, labels.data(), n());
+      H.solve(ULV, weights);
+
+      #if 0
       #if ITERATIVE_REFINEMENT == 1
         DenseMW_t rhs(n(), 1, labels.data(), n());
         DenseM_t weights(rhs), residual(n(), 1);
@@ -204,13 +208,10 @@ namespace strumpack {
         #endif
 
       #endif // iterative or direct solve
+      #endif
 
       if (opts.verbose())
         std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
-      // params::print_dense_counter("AFTER SOLVE");
-
-      #if 0
-      #endif
 
       // DenseM_t weights(1, 1);
       return weights;
@@ -227,7 +228,114 @@ namespace strumpack {
           prediction[c] += weights(r, 0) *
             eval_kernel_function(data_.ptr(0, r), test.ptr(0, c));
       return prediction;
+    }
 
+    template<typename scalar_t>
+    DenseMatrix<scalar_t> Kernel<scalar_t>::fit_HSS_multiple
+    (std::vector<scalar_t>& labels, const HSS::HSSOptions<scalar_t>& opts,
+      scalar_t lambda) {
+      TaskTimer timer("compression");
+      if (opts.verbose())
+        std::cout << "# starting HSS compression..." << std::endl;
+      std::vector<int> perm;
+      timer.start();
+      HSS::HSSMatrix<scalar_t> H(*this, perm, opts);
+      std::cout << "# HSS_compression_time = "
+                << timer.elapsed() << std::endl;
+      DenseMW_t B(1, n(), labels.data(), 1);
+      B.lapmt(perm, true);
+      perm.clear();
+      if (H.is_compressed())
+        std::cout << "# created HSS matrix of dimension "
+                  << H.rows() << " x " << H.cols()
+                  << " with " << H.levels() << " levels" << std::endl
+                  << "# compression succeeded!" << std::endl;
+      else std::cout << "# compression failed!!!" << std::endl;
+      std::cout << "# rank_H = " << H.rank() << std::endl
+                << "# HSS memory_H = "
+                << H.memory() / 1e6 << " MB" << std::endl;
+
+      // Computing error against dense matrix
+      if ( n()<= 500 ){
+        DenseM_t Kdense(n(),n());
+        for(int j = 0; j < n(); j++){
+          for(int i = 0; i < n(); i++){
+            Kdense(i,j) = eval(i,j);
+          }
+        }
+        auto HSSd = H.dense();
+        HSSd.scaled_add(-1., Kdense);
+        std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
+        HSSd.normF() / Kdense.normF() << std::endl;
+      }
+
+      std::cout << std::endl;
+      std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1, 5e+1};
+      // std::vector<scalar_t> lambda_vec {0., 1.0, 10., 20.};
+      int number_weights = lambda_vec.size();
+      std::vector<std::vector<scalar_t>> vov_weights;
+      H.shift(-lambda); // Substract original lambda
+      for(auto ilambda: lambda_vec){
+        std::cout << "Solving for lambda = " << ilambda << std::endl;
+        H.shift(ilambda);
+
+        std::cout << "# factorization started..." << std::endl;
+        timer.start();
+        auto ULV = H.factor();
+        std::cout << "# ULV_factorization_time = "
+                  << timer.elapsed()
+                  << std::endl
+                  << "# ULV_memory_MB = "
+                  << ULV.memory()/1.e6
+                  << std::endl;
+
+        std::cout << "# solution started..." << std::endl;
+        DenseM_t weight(n(), 1, labels.data(), n());
+        H.solve(ULV, weight);
+
+        if (opts.verbose())
+          std::cout << "# HSS_solve_time = " << timer.elapsed() << std::endl;
+
+        std::vector<scalar_t> tmp(weight.data(), weight.data() + n());
+        vov_weights.push_back(tmp);
+        H.shift(-ilambda);
+        std::cout << std::endl;
+      }
+
+      // Combine vector of vector, of weights
+      std::vector<scalar_t> allc;
+      allc.reserve(number_weights*n());
+      for (auto& items: vov_weights)
+          std::move(items.begin(), items.end(), std::back_inserter(allc));
+      DenseMatrix<scalar_t> weights(n(), number_weights, allc.data(), n());
+
+      // DenseM_t weights(1, 1);
+      return weights;
+    }
+
+    template<typename scalar_t>
+    DenseMatrix<scalar_t> Kernel<scalar_t>::predict_multiple
+    (const DenseM_t& test, const DenseM_t& weights) const {
+      assert(test.rows() == d());
+      int m = test.cols();
+      int numw = weights.cols();
+      // WARNING: test is read transposed
+      // std::cout << "n = " << n() << std::endl;
+      // std::cout << "m = " << m << std::endl;
+      // std::cout << "w = " << numw << std::endl;
+      // std::cout << "test_points(" << test.rows() <<    "," << test.cols()    << ")" << std::endl;
+      // std::cout << "weights    (" << weights.rows() << "," << weights.cols() << ")" << std::endl;
+      DenseMatrix<scalar_t> prediction(m,numw);
+      prediction.zero();
+
+      for(int w = 0; w < numw; w++){
+        #pragma omp parallel for
+        for (std::size_t c=0; c<test.cols(); c++)
+          for (std::size_t r=0; r<n(); r++)
+            prediction(c,w) += weights(r, w) *
+              eval_kernel_function(data_.ptr(0, r), test.ptr(0, c)); // Need to add lambda
+      }
+      return prediction;
     }
 
 

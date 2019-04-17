@@ -1256,7 +1256,7 @@ namespace strumpack {
   template<typename scalar_t> void
   DenseMatrix<scalar_t>::print(std::string name, bool all, int width) const {
     std::cout << name << " = [  % " << rows() << "x" << cols()
-              << ", ld=" << ld() /* << ", norm=" << norm()*/ << std::endl;
+              << ", ld=" << ld() << ", norm=" << norm() << std::endl;
     if (all || (rows() <= 20 && cols() <= 32)) {
       for (std::size_t i=0; i<rows(); i++) {
         for (std::size_t j=0; j<cols(); j++)

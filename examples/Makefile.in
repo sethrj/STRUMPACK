@@ -1,4 +1,4 @@
-all: KernelRegressionMPI KernelPredictionMPI KernelRegression
+all: KernelRegression_Multiple KernelRegressionMPI
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@
@@ -93,6 +93,10 @@ KernelRegression: KernelRegression.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegression.o
 	$(CXX) $(LDFLAGS) KernelRegression.o -o $@ $(LIBS)
 
+KernelRegression_Multiple: KernelRegression_Multiple.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegression_Multiple.o
+	$(CXX) $(LDFLAGS) KernelRegression_Multiple.o -o $@ $(LIBS)
+
 KernelRegressionANNdriver: KernelRegressionANNdriver.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c $< -o KernelRegressionANNdriver.o
 	$(CXX) $(LDFLAGS) KernelRegressionANNdriver.o -o $@ $(LIBS)
@@ -134,6 +138,7 @@ clean:
 	testMMdouble testMMdouble64 testMMfloat \
 	mtx2bin bin2mtx KernelRegression \
 	KernelRegressionNys @MPI_EXAMPLES@ \
-  Sandbox SandboxMPI KernelPredictionMPI
+  Sandbox SandboxMPI KernelPredictionMPI \
+  KernelRegression_Multiple
 
 

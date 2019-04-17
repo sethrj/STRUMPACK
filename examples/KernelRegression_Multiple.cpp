@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
   KernelType ktype = KernelType::GAUSS;
   string mode("test");
 
-  cout << "# usage: ./KernelRegression file d h lambda "
+  cout << "# usage: ./KernelRegression_Multiple file d h lambda "
        << "kernel(Gauss, Laplace) mode(valid, test)" << endl;
   if (argc > 1) filename = string(argv[1]);
   if (argc > 2) d = stoi(argv[2]);
@@ -107,24 +107,33 @@ int main(int argc, char *argv[]) {
                                test_points(d, m, testing.data(), d);
 
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
-  auto weights = K->fit_HSS(train_labels, hss_opts);
+  DenseMatrix<scalar_t> weights = K->fit_HSS_multiple(train_labels, hss_opts, lambda);
 
   cout << "# prediction start..." << endl;
   timer.start();
-  auto prediction = K->predict(test_points, weights);
+  DenseMatrix<scalar_t> prediction = K->predict_multiple(test_points, weights);
   cout << "# prediction took " << timer.elapsed() << endl << endl;
 
   // compute accuracy score of prediction
-  size_t incorrect_quant = 0;
-  for (size_t i=0; i<m; i++){
-    if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-      (prediction[i] < 0 && test_labels[i] >= 0))
-      incorrect_quant++;
-  }
-  scalar_t c_err = (scalar_t(incorrect_quant) / m) * 100.;
-  cout << "# c-err: " << fixed << setprecision(2)
+  scalar_t best_cerr = 100.;
+  int idx_best_cerr = -1;
+  for(int w = 0; w<weights.cols(); w++){
+    size_t incorrect_quant = 0;
+    for (size_t i=0; i<m; i++){
+      if ((prediction(i,w) >= 0 && test_labels[i] < 0) ||
+        (prediction(i,w) < 0 && test_labels[i] >= 0))
+        incorrect_quant++;
+    }
+    scalar_t c_err = (scalar_t(incorrect_quant) / m) * 100.;
+    cout << "# c-err: " << fixed << setprecision(2)
         << c_err << "%" << endl;
+    if( c_err <= best_cerr ){
+      best_cerr = c_err;
+      idx_best_cerr = w;
+    }
+  }
 
+  cout << "# best_c_err: " << best_cerr << " at " << idx_best_cerr << endl << endl;
   cout << "# total_time: " << defaultfloat<< total_time.elapsed() << endl << endl;
   return 0;
-}
+  }

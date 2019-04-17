@@ -73,7 +73,7 @@ namespace strumpack {
         ann.read_from_binary_file(ann_filename);
         scores.read_from_binary_file(scores_filename);
         std::cout << "# Reading ANN files took "
-                  << timer.elapsed() << std::endl;
+                  << timer.elapsed() << std::endl << std::endl;
         // Calling compression routine
         std::cout << "# Compression started..." << std::endl;
         WorkCompressANN<scalar_t> w;

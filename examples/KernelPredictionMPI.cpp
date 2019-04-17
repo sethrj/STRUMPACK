@@ -21,7 +21,7 @@
  * prepare derivative works, distribute copies to the public, perform
  * publicly and display publicly, and to permit others to do so.
  *
- * Developers: Pieter Ghysels, Francois-Henry Rouet, Xiaoye S. Li.
+ * Developers: Pieter Ghysels, Gustavo Chavez, Xiaoye S. Li.
  *             (Lawrence Berkeley National Lab, Computational Research
  *             Division).
  *
