@@ -21,7 +21,7 @@
  * prepare derivative works, distribute copies to the public, perform
  * publicly and display publicly, and to permit others to do so.
  *
- * Developers: Pieter Ghysels, Francois-Henry Rouet, Xiaoye S. Li.
+ * Developers: Pieter Ghysels, Gustavo Chavez, Xiaoye S. Li.
  *             (Lawrence Berkeley National Lab, Computational Research
  *             Division).
  *
@@ -314,7 +314,7 @@ namespace strumpack {
     }
 
     template<typename scalar_t>
-    DenseMatrix<scalar_t> Kernel<scalar_t>::predict_multiple
+    DenseMatrix<scalar_t> Kernel<scalar_t>::predict_multiple // shared memory
     (const DenseM_t& test, const DenseM_t& weights) const {
       assert(test.rows() == d());
       int m = test.cols();
@@ -443,6 +443,173 @@ namespace strumpack {
       weights.Comm().all_reduce
         (prediction.data(), prediction.size(), MPI_SUM);
       return prediction;
+    }
+
+    template<typename scalar_t>
+    DistributedMatrix<scalar_t> Kernel<scalar_t>::fit_HSS_multiple
+    (const BLACSGrid& grid, std::vector<scalar_t>& labels,
+     const HSS::HSSOptions<scalar_t>& opts) {
+      TaskTimer timer("HSScompression");
+      auto& c = grid.Comm();
+      bool verb = opts.verbose() && c.is_root();
+      if (verb) std::cout << "# Compression started..." << std::endl;
+      timer.start();
+      std::vector<int> perm;
+      HSS::HSSMatrixMPI<scalar_t> H(*this, &grid, perm, opts);
+      DenseMW_t B(1, n(), labels.data(), 1);
+      B.lapmt(perm, true);
+      perm.clear();
+      const auto lvls = H.max_levels();
+      const auto rank = H.max_rank();
+      const auto mem = H.total_memory();
+      if (c.is_root()) {
+        std::cout << "# HSS compression time = "
+                  << timer.elapsed() << std::endl;
+        if (H.is_compressed())
+          std::cout << "# created HSS matrix of dimension "
+                    << H.rows() << " x " << H.cols()
+                    << " with " << lvls << " levels" << std::endl
+                    << "# compression succeeded!" << std::endl;
+        else std::cout << "# compression failed!!!" << std::endl;
+        std::cout << "# rank_H = " << rank << std::endl
+                  << "# HSS_memory_MB = " << mem / 1e6 << std::endl;
+      }
+      // Computing error against dense matrix
+      if ( n()<= 500 ){
+        DenseM_t Kdense(n(),n());
+        for(int j = 0; j < n(); j++){
+          for(int i = 0; i < n(); i++){
+            Kdense(i,j) = eval(i,j);
+          }
+        }
+        auto HSSd_dist = H.dense();
+        auto HSSd = HSSd_dist.all_gather();
+        HSSd.scaled_add(-1., Kdense);
+        if (c.is_root())
+          std::cout << "# Compression rel error = ||HSSd-Hd||_F/||Hd||_F = " <<
+          HSSd.normF() / Kdense.normF() << std::endl << std::endl;
+      }
+
+      DistM_t weights(&grid, n(), 0);
+      std::vector<scalar_t> lambda_vec {0.0, 1.0, 10., 20.};
+      // std::vector<scalar_t> lambda_vec {0.0};
+      H.shift(-lambda_); // Substract original lambda
+
+      for(auto ilambda: lambda_vec){
+        if (c.is_root())
+          std::cout << "Solving for lambda = " << ilambda << std::endl;
+        H.shift(ilambda);
+
+        if (c.is_root())
+          std::cout << "# factorization started..." << std::endl;
+        timer.start();
+        auto ULV = H.factor();
+        if (c.is_root())
+          std::cout << "# factorization time = " << timer.elapsed() << std::endl;
+
+        if (c.is_root())
+          std::cout << "# solve started..." << std::endl;
+        DenseMW_t cB(n(), 1, labels.data(), n());
+        DistM_t weight(&grid, n(), 1);
+        weight.scatter(cB);
+        H.solve(ULV, weight);
+        if (c.is_root())
+          std::cout << "# HSS_solve_time = " << timer.elapsed()
+                    << std::endl  << std::endl;
+
+        weights.hconcat(weight);
+        H.shift(-ilambda);
+      }
+
+      return weights;
+    }
+
+    template<typename scalar_t>
+    std::vector<int> Kernel<scalar_t>::getBlockRange(int n, int size, int rank)
+    const {
+      std::vector<int> range;
+      int lastBlock = int(std::ceil( scalar_t(n)/ scalar_t(size)));
+      int sub_len;
+      int sub_start;
+      if ((rank == lastBlock-1) && (n % size)){ // LAST
+        sub_start = rank * size;
+        sub_len   = n % size;
+      } else { // REST
+        sub_start = rank * size;
+        sub_len   = size;
+      }
+      range.push_back(sub_start);
+      range.push_back(sub_start + sub_len);
+      return range;
+    }
+
+    template<typename scalar_t>
+    void Kernel<scalar_t>::getBlock(DistributedMatrix<scalar_t> &_D,
+    std::vector<int>& vec_rows, std::vector<int>& vec_cols,
+    MPIComm c, BLACSGrid *grid) const {
+      using DistM_t = DistributedMatrix<scalar_t>;
+      // Element extraction
+      auto Aelem = [&]
+        (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
+        DistM_t& B, std::size_t rlo, std::size_t clo,
+        MPI_Comm comm) {
+        std::vector<std::size_t> lI, lJ;
+        lI.reserve(B.lrows());
+        lJ.reserve(B.lcols());
+        for (size_t j=0; j<J.size(); j++)
+          if (B.colg2p(j) == B.pcol())
+            lJ.push_back(J[j]);
+        for (size_t i=0; i<I.size(); i++)
+          if (B.rowg2p(i) == B.prow())
+            lI.push_back(I[i]);
+        auto lB = B.dense_wrapper();
+        // K->eval_vec(lI, lJ, lB); // operator call
+        eval_vec(lI, lJ, lB); // operator call
+      };
+
+      int numRows = vec_rows[1] - vec_rows[0];
+      int numCols = vec_cols[1] - vec_cols[0];
+      std::vector<std::size_t> I, J;
+      I.reserve(numRows);
+      J.reserve(numCols);
+      for (std::size_t i=vec_rows[0]; i<vec_rows[1]; i++)
+        I.push_back(i);
+      for (std::size_t j=vec_cols[0]; j<vec_cols[1]; j++)
+        J.push_back(j);
+
+      _D = DistM_t(grid, numRows, numCols);
+      // Aelem(I, J, _D, 0, 0, comm);
+      Aelem(I, J, _D, vec_rows[0], vec_cols[0], c.comm());
+    }
+
+    template<typename scalar_t>
+    DistributedMatrix<scalar_t> Kernel<scalar_t>::predict_multiple // MPI
+    (const DenseM_t& test, DistM_t& weights,
+    MPIComm c, BLACSGrid *grid) const {
+      int m = weights.rows();
+      int LB = weights.cols();
+      int NB = std::min(m, int(n()));
+      int numb_rows = int(std::ceil( scalar_t(m)/scalar_t(LB)));
+      int numb_cols = int(std::ceil( scalar_t(n())/ scalar_t(NB)));
+      // Complete prediction matrix
+      DistributedMatrix<scalar_t> matP(grid, m, LB);
+      matP.zero();
+      for(int ib = 0; ib < numb_rows; ib++){
+        std::vector<int> rowRange = getBlockRange(int(m), int(LB), int(ib));
+        // Wrapping prediction matrix
+        DistributedMatrixWrapper<scalar_t> bP(rowRange[1]-rowRange[0], LB, matP, rowRange[0], 0);
+        for(int jb = 0; jb < numb_cols; jb++){
+          std::vector<int> colRange = getBlockRange( int(n()), int(NB), int(jb));
+          // Wrapping weights matrix
+          DistributedMatrixWrapper<scalar_t> bW(colRange[1]-colRange[0], LB, weights, colRange[0], 0);
+          // Forming block of Kp matrix (expensive step)
+          DistributedMatrix<scalar_t> bKp;
+          getBlock(bKp, rowRange, colRange, c.comm(), grid);
+          // Perform multiplication
+          gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
+        }
+      }
+      return matP;
     }
 
 #if defined(STRUMPACK_USE_BPACK)

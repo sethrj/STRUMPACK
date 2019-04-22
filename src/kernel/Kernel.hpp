@@ -75,6 +75,7 @@ namespace strumpack {
       using DenseMW_t = DenseMatrixWrapper<scalar_t>;
 #if defined(STRUMPACK_USE_MPI)
       using DistM_t = DistributedMatrix<scalar_t>;
+      using DistMW_t = DistributedMatrixWrapper<scalar_t>;
 #endif
 
     public:
@@ -135,6 +136,17 @@ namespace strumpack {
        * J.size()
        */
       void operator()(const std::vector<std::size_t>& I,
+                      const std::vector<std::size_t>& J,
+                      DenseM_t& B) const {
+        assert(B.rows() == I.size() && B.cols() == J.size());
+        for (auto j=0; j<J.size(); j++)
+          for (auto i=0; i<I.size(); i++) {
+            assert(I[i] < n() && J[j] < n());
+            B(i, j) = eval(I[i], J[j]);
+          }
+      }
+
+      void eval_vec(const std::vector<std::size_t>& I,
                       const std::vector<std::size_t>& J,
                       DenseM_t& B) const {
         assert(B.rows() == I.size() && B.cols() == J.size());
@@ -212,6 +224,10 @@ namespace strumpack {
       (const BLACSGrid& grid, std::vector<scalar_t>& labels,
        const HSS::HSSOptions<scalar_t>& opts);
 
+      DistM_t fit_HSS_multiple
+      (const BLACSGrid& grid, std::vector<scalar_t>& labels,
+       const HSS::HSSOptions<scalar_t>& opts);
+
       /**
        * Return prediction scores for the test points, using the
        * weights computed in fit_HSS() or fit_HODLR().
@@ -225,6 +241,15 @@ namespace strumpack {
        */
       std::vector<scalar_t> predict
       (const DenseM_t& test, const DistM_t& weights) const;
+
+      std::vector<int> getBlockRange(int n, int size, int rank) const;
+
+      void getBlock(DistributedMatrix<scalar_t> &_D,
+        std::vector<int>& vec_rows, std::vector<int>& vec_cols,
+        MPIComm c, BLACSGrid *grid) const;
+
+      DistributedMatrix<scalar_t> predict_multiple (const DenseM_t& test,
+        DistM_t& weights, MPIComm c, BLACSGrid *grid) const;
 
 #if defined(STRUMPACK_USE_BPACK)
       /**
@@ -265,10 +290,6 @@ namespace strumpack {
        */
       DenseM_t& data() { return data_; }
 
-    protected:
-      DenseM_t& data_;
-      scalar_t lambda_;
-
       /**
        * Purely virtual function that needs to be defined in the
        * subclass. This defines the actual kernel function. All data
@@ -283,9 +304,15 @@ namespace strumpack {
        * \see GaussKernel::eval_kernel_function,
        * LaplacKernel::eval_kernel_function
        */
-      virtual scalar_t eval_kernel_function
+      virtual scalar_t eval_kernel_function // TODO: make this protected
       (const scalar_t* x, const scalar_t* y) const = 0;
-    };
+
+
+    protected:
+      DenseM_t& data_;
+      scalar_t lambda_;
+
+    }; // class Kernel
 
 
     /**

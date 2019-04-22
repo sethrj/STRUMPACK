@@ -119,6 +119,9 @@ read_from_file(string filename) {
 
 int main(int argc, char *argv[]) {
   using scalar_t = float;
+  using DistM_t = DistributedMatrix<scalar_t>;
+  using DenseM_t = DenseMatrix<scalar_t>;
+
   TaskTimer timer_all("all");
   timer_all.start();
   MPI_Init(&argc, &argv);
@@ -133,7 +136,7 @@ int main(int argc, char *argv[]) {
   TaskTimer timer("prediction");
 
   if (c.is_root())
-    cout << "# usage: ./KernelRegression file d h lambda "
+    cout << "# usage: ./KernelRegressionMPI_Multiple file d h lambda "
          << "kernel(Gauss, Laplace) mode(valid, test)" << endl;
   if (argc > 1) filename = string(argv[1]);
   if (argc > 2) d = stoi(argv[2]);
@@ -173,55 +176,43 @@ int main(int argc, char *argv[]) {
       opts.describe_options();
 
     BLACSGrid g(c);
+
     timer.start();
+    if (c.is_root()) cout << endl << "# HSS fit_HSS_multiple start..." << endl;
+    DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts);
+    if (c.is_root()) cout << "# fit_HSS_multiple took " << timer.elapsed() << endl;
 
-    auto weights = K->fit_HSS(g, train_labels, opts);
-    if (c.is_root()) cout << "# fit_HSS took " << timer.elapsed() << endl;
+    if (c.is_root()) cout << endl << "# HSS predict_multiple start..." << endl;
+    timer.start();
+    DistributedMatrix<scalar_t> prediction =
+      K->predict_multiple(test_points, weights, c.comm(), &g);
+    prediction.print();
+    if (c.is_root()) cout << "# predict_multiple took " << timer.elapsed() << endl;
 
-    #if 0
-    // Save weights to binary file
-    // Weights filename: "w_h_lambda_.bin", example: w_3.755000_0.700000_.bin
-    string weights_filename = opts.scratch_folder() + "/w_" + std::to_string(h)
-              + "_" + std::to_string(lambda) + "_.binweights";
-    weights.print_to_binary_file(weights_filename);
-    if (c.is_root())
-      cout << "Saved weights: " << weights_filename << std::endl;
-
-    // Read weights from binary file
-    // if (c.is_root()){
-    // DenseMatrix<scalar_t> read_weights_bin(n,1);
-    //   read_weights_bin.read_from_binary_file("/Users/gichavez/Documents/github/code_pap3_tests/profile_memory/test.bin");
-    //   read_weights_bin.print("Read weights", true, 8);
-    // }
-    #endif
-
-    // Prediction
-    auto check = [&](const std::vector<scalar_t>& prediction) {
-      // compute accuracy score of prediction
-      if (c.is_root()) {
-        size_t incorrect_quant = 0;
-        for (size_t i=0; i<m; i++)
-          if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-              (prediction[i] < 0 && test_labels[i] >= 0))
-            incorrect_quant++;
-        cout << "# prediction score: "
-        << (float(m - incorrect_quant) / m) * 100. << "%" << endl
-        << "# c-err: "
-        << (float(incorrect_quant) / m) * 100. << "%"
-        << endl;
-      }
-    };
-    if (c.is_root()) cout << endl << "# HSS prediction start..." << endl;
-    auto prediction = K->predict(test_points, weights);
-    if (c.is_root()) cout << "# prediction took " << timer.elapsed() << endl;
-    check(prediction);
+    // // Prediction
+    // auto check = [&](const std::vector<scalar_t>& prediction) {
+    //   // compute accuracy score of prediction
+    //   if (c.is_root()) {
+    //     size_t incorrect_quant = 0;
+    //     for (size_t i=0; i<m; i++)
+    //       if ((prediction[i] >= 0 && test_labels[i] < 0) ||
+    //           (prediction[i] < 0 && test_labels[i] >= 0))
+    //         incorrect_quant++;
+    //     cout << "# prediction score: "
+    //     << (float(m - incorrect_quant) / m) * 100. << "%" << endl
+    //     << "# c-err: "
+    //     << (float(incorrect_quant) / m) * 100. << "%"
+    //     << endl;
+    //   }
+    // };
+    // check(prediction);
   }
 
   if (c.is_root())
     std::cout << "# total_time: "
       << timer_all.elapsed() << std::endl << std::endl;
   }
-  print_dense_counter_MPI("SANITY counter", c);
+  // print_dense_counter_MPI("SANITY counter", c);
   MPI_Finalize();
   return 0;
 }

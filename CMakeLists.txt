@@ -708,6 +708,8 @@ if(STRUMPACK_USE_MPI)
   ${CMAKE_BINARY_DIR}/examples/SandboxMPI.cpp COPYONLY)
   configure_file(${CMAKE_SOURCE_DIR}/examples/KernelPredictionMPI.cpp
   ${CMAKE_BINARY_DIR}/examples/KernelPredictionMPI.cpp COPYONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/examples/KernelRegressionMPI_Multiple.cpp
+  ${CMAKE_BINARY_DIR}/examples/KernelRegressionMPI_Multiple.cpp COPYONLY)
 endif()
 
 if(STRUMPACK_BUILD_TESTS)
