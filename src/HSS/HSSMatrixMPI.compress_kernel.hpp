@@ -321,8 +321,10 @@ namespace strumpack {
           for (auto i : w.c[0].Jr) sbuf0.push_back(i);
           for (auto i : w.c[0].Jc) sbuf0.push_back(i);
           for (auto i : w.c[0].ids_scores) sbuf0.push_back(i.first);
-          for (auto i : w.c[0].ids_scores)
-            sbuf0.push_back(reinterpret_cast<std::size_t&>(i.second));
+          for (auto i : w.c[0].ids_scores){
+            double tmp = i.second;
+            sbuf0.push_back(reinterpret_cast<std::size_t&>(tmp));
+          }
           for (int p=P0active; p<P; p++)
             if (rank == (p - P0active) % P0active)
               sreq.emplace_back(Comm().isend(sbuf0, p, 0));
@@ -349,8 +351,10 @@ namespace strumpack {
           for (auto i : w.c[1].Jr) sbuf1.push_back(i);
           for (auto i : w.c[1].Jc) sbuf1.push_back(i);
           for (auto i : w.c[1].ids_scores) sbuf1.push_back(i.first);
-          for (auto i : w.c[1].ids_scores)
-            sbuf1.push_back(reinterpret_cast<std::size_t&>(i.second));
+          for (auto i : w.c[1].ids_scores){
+            double tmp = i.second;
+            sbuf1.push_back(reinterpret_cast<std::size_t&>(tmp));
+          }
           for (int p=0; p<root1; p++)
             if (rank - root1 == p % P1active)
               sreq.emplace_back(Comm().isend(sbuf1, p, 1));
