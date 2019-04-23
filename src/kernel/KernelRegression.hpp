@@ -448,7 +448,7 @@ namespace strumpack {
     template<typename scalar_t>
     DistributedMatrix<scalar_t> Kernel<scalar_t>::fit_HSS_multiple
     (const BLACSGrid& grid, std::vector<scalar_t>& labels,
-     const HSS::HSSOptions<scalar_t>& opts) {
+     const HSS::HSSOptions<scalar_t>& opts, std::vector<scalar_t> lambda_vec) {
       TaskTimer timer("HSScompression");
       auto& c = grid.Comm();
       bool verb = opts.verbose() && c.is_root();
@@ -491,13 +491,12 @@ namespace strumpack {
       }
 
       DistM_t weights(&grid, n(), 0);
-      std::vector<scalar_t> lambda_vec {0.0, 1.0, 10., 20.};
-      // std::vector<scalar_t> lambda_vec {0.0};
       H.shift(-lambda_); // Substract original lambda
-
       for(auto ilambda: lambda_vec){
-        if (c.is_root())
+        if (c.is_root()){
+          std::cout << std::endl;
           std::cout << "Solving for lambda = " << ilambda << std::endl;
+        }
         H.shift(ilambda);
 
         if (c.is_root())

@@ -166,7 +166,6 @@ int main(int argc, char *argv[]) {
     training_points(d, n, training.data(), d),
     test_points(d, m, testing.data(), d);
 
-
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
   {
     HSSOptions<scalar_t> opts;
@@ -174,44 +173,54 @@ int main(int argc, char *argv[]) {
     opts.set_from_command_line(argc, argv);
     if (c.is_root() && opts.verbose())
       opts.describe_options();
-
     BLACSGrid g(c);
-
     timer.start();
+
+    std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1,
+     5e+1, 1e+2, 5e+2, 1e+3, 5e+3, 1e+4, 5e+4, 1e+5, 5e+5, 1e+6, 5e+6};
     if (c.is_root()) cout << endl << "# HSS fit_HSS_multiple start..." << endl;
-    DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts);
+    DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts, lambda_vec);
     if (c.is_root()) cout << "# fit_HSS_multiple took " << timer.elapsed() << endl;
 
     if (c.is_root()) cout << endl << "# HSS predict_multiple start..." << endl;
     timer.start();
     DistributedMatrix<scalar_t> prediction =
       K->predict_multiple(test_points, weights, c.comm(), &g);
-    prediction.print();
-    if (c.is_root()) cout << "# predict_multiple took " << timer.elapsed() << endl;
+    if (c.is_root()) cout << "# predict_multiple took "
+      << timer.elapsed() << endl << endl;
 
-    // // Prediction
-    // auto check = [&](const std::vector<scalar_t>& prediction) {
-    //   // compute accuracy score of prediction
-    //   if (c.is_root()) {
-    //     size_t incorrect_quant = 0;
-    //     for (size_t i=0; i<m; i++)
-    //       if ((prediction[i] >= 0 && test_labels[i] < 0) ||
-    //           (prediction[i] < 0 && test_labels[i] >= 0))
-    //         incorrect_quant++;
-    //     cout << "# prediction score: "
-    //     << (float(m - incorrect_quant) / m) * 100. << "%" << endl
-    //     << "# c-err: "
-    //     << (float(incorrect_quant) / m) * 100. << "%"
-    //     << endl;
-    //   }
-    // };
-    // check(prediction);
-  }
+    // Gather to master/root rank, and compute prediction
+    DenseMatrix<scalar_t> local_pred = prediction.gather();
+    if(c.is_root()){
+      // compute accuracy score of prediction
+      scalar_t best_cerr = 100.;
+      int idx_best_cerr = -1;
+      for(int w = 0; w<weights.cols(); w++){
+        size_t incorrect_quant = 0;
+        for (size_t i=0; i<m; i++){
+          if ((local_pred(i,w) >= 0 && test_labels[i] < 0) ||
+            (local_pred(i,w) < 0 && test_labels[i] >= 0))
+            incorrect_quant++;
+        }
+        scalar_t c_err = (scalar_t(incorrect_quant) / m) * 100.;
+        cout << "# c-err: " << fixed << setprecision(2)
+            << c_err << "%" << "lambda = " << lambda_vec[w] << endl;
+        if( c_err <= best_cerr ){
+          best_cerr = c_err;
+          idx_best_cerr = w;
+        }
+      }
+      cout << endl;
+      cout << "# best_c_err: " << best_cerr << " with lambda =  "
+           << lambda_vec[idx_best_cerr] << endl << endl;
+    }
+  } // K
 
   if (c.is_root())
     std::cout << "# total_time: "
       << timer_all.elapsed() << std::endl << std::endl;
-  }
+  } // comm
+
   // print_dense_counter_MPI("SANITY counter", c);
   MPI_Finalize();
   return 0;

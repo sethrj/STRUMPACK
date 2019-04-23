@@ -226,7 +226,7 @@ namespace strumpack {
 
       DistM_t fit_HSS_multiple
       (const BLACSGrid& grid, std::vector<scalar_t>& labels,
-       const HSS::HSSOptions<scalar_t>& opts);
+       const HSS::HSSOptions<scalar_t>& opts, std::vector<scalar_t> lambda_vec);
 
       /**
        * Return prediction scores for the test points, using the
