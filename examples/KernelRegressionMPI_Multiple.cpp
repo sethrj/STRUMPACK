@@ -204,21 +204,25 @@ int main(int argc, char *argv[]) {
         }
         scalar_t c_err = (scalar_t(incorrect_quant) / m) * 100.;
         cout << "# c-err: " << fixed << setprecision(2)
-            << c_err << "%" << "lambda = " << lambda_vec[w] << endl;
+             << c_err << "%" << "   lambda = "
+             << std::scientific << lambda_vec[w] << endl;
+        cout << std::defaultfloat;
         if( c_err <= best_cerr ){
           best_cerr = c_err;
           idx_best_cerr = w;
         }
       }
       cout << endl;
-      cout << "# best_c_err: " << best_cerr << " with lambda =  "
-           << lambda_vec[idx_best_cerr] << endl << endl;
+      cout << "# best_c_err: " << std::fixed << std::setw(2) << best_cerr;
+      cout << " with lambda =  " << std::scientific << lambda_vec[idx_best_cerr]
+           << endl << endl;
     }
   } // K
 
   if (c.is_root())
     std::cout << "# total_time: "
-      << timer_all.elapsed() << std::endl << std::endl;
+      << std::fixed << std::setw(2) << timer_all.elapsed()
+      << std::endl << std::endl;
   } // comm
 
   // print_dense_counter_MPI("SANITY counter", c);

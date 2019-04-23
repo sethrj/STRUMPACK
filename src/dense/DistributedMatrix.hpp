@@ -618,9 +618,10 @@ namespace strumpack {
       m.data_ = nullptr;
     } else {
       data_ = new scalar_t[lrows_*lcols_];
-      std::cout << "Allocating inside Move constructor: "
-                << "OLD(" << old_lrows_ << "," << old_lcols_ << ">" << ") <=>"
-                << "NEW(" << lrows_ << "," << lcols_ << ")" << std::endl;
+      if (PRINT_COUNTERS )
+        std::cout << "Allocating inside Move constructor: "
+          << "OLD(" << old_lrows_ << "," << old_lcols_ << ">" << ") <=>"
+          << "NEW(" << lrows_ << "," << lcols_ << ")" << std::endl;
       for (int c=0; c<lcols_; c++)
         for (int r=0; r<lrows_; r++)
           operator()(r, c) = m(r, c);
@@ -749,8 +750,8 @@ namespace strumpack {
       delete[] data_;
       data_ = new scalar_t[lrows_*lcols_];
       STRUMPACK_DENSE_ADD_MEM_MPI(sizeof(scalar_t)*lrows_*lcols_);
-        // std::cout << "=======> Operator overload for copy"
-        //           << "[" << lrows_ << "," << lcols_ << "]"
+      // std::cout << "=======> Operator overload for copy"
+      //           << "[" << lrows_ << "," << lcols_ << "]"
       //           << " = " << (sizeof(scalar_t)*lrows_*lcols_)/1e6
       //           <<  std::endl;
     }
