@@ -180,7 +180,7 @@ namespace strumpack {
 
       DenseM_t fit_HSS_multiple
       (std::vector<scalar_t>& labels, const HSS::HSSOptions<scalar_t>& opts,
-        scalar_t lambda);
+        std::vector<scalar_t> lambda_vec);
 
       /**
        * Return prediction scores for the test points, using the
@@ -245,6 +245,7 @@ namespace strumpack {
       std::vector<int> getBlockRange(int n, int size, int rank) const;
 
       void getBlock(DistributedMatrix<scalar_t> &_D,
+        const DenseMatrix<scalar_t> &test,
         std::vector<int>& vec_rows, std::vector<int>& vec_cols,
         MPIComm c, BLACSGrid *grid) const;
 

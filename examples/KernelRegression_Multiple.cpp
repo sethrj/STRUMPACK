@@ -106,13 +106,20 @@ int main(int argc, char *argv[]) {
   DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d),
                                test_points(d, m, testing.data(), d);
 
+  std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1,
+    5e+1, 1e+2, 5e+2, 1e+3, 5e+3, 1e+4, 5e+4, 1e+5, 5e+5, 1e+6, 5e+6};
+  // std::vector<scalar_t> lambda_vec {5e-0};
+
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
-  DenseMatrix<scalar_t> weights = K->fit_HSS_multiple(train_labels, hss_opts, lambda);
+  DenseMatrix<scalar_t> weights = K->fit_HSS_multiple(train_labels, hss_opts, lambda_vec);
 
   cout << "# prediction start..." << endl;
   timer.start();
   DenseMatrix<scalar_t> prediction = K->predict_multiple(test_points, weights);
   cout << "# prediction took " << timer.elapsed() << endl << endl;
+
+  // weights.print("weights", false, 10);
+  prediction.print("prediction", false, 10);
 
   // compute accuracy score of prediction
   scalar_t best_cerr = 100.;
@@ -125,15 +132,26 @@ int main(int argc, char *argv[]) {
         incorrect_quant++;
     }
     scalar_t c_err = (scalar_t(incorrect_quant) / m) * 100.;
+    // cout << "# c-err: " << fixed << setprecision(2)
+    //     << c_err << "%" << endl;
     cout << "# c-err: " << fixed << setprecision(2)
-        << c_err << "%" << endl;
+      << c_err << "%" << "   lambda = "
+      << std::scientific << lambda_vec[w] << endl;
+    cout << std::fixed;
     if( c_err <= best_cerr ){
       best_cerr = c_err;
       idx_best_cerr = w;
     }
   }
 
-  cout << "# best_c_err: " << best_cerr << " at " << idx_best_cerr << endl << endl;
-  cout << "# total_time: " << defaultfloat<< total_time.elapsed() << endl << endl;
+  // cout << "# best_c_err: " << best_cerr << " at " << idx_best_cerr << endl << endl;
+  // cout << "# total_time: " << defaultfloat<< total_time.elapsed() << endl << endl;
+  cout << endl;
+  cout << "# best_c_err: " << std::fixed << std::setw(2) << best_cerr;
+  cout << " with lambda =  " << std::scientific << lambda_vec[idx_best_cerr]
+  << endl << endl;
+  std::cout << "# total_time: "
+  << std::fixed << std::setw(2) << total_time.elapsed()
+  << std::endl << std::endl;
   return 0;
   }

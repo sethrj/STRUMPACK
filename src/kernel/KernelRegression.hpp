@@ -233,7 +233,7 @@ namespace strumpack {
     template<typename scalar_t>
     DenseMatrix<scalar_t> Kernel<scalar_t>::fit_HSS_multiple
     (std::vector<scalar_t>& labels, const HSS::HSSOptions<scalar_t>& opts,
-      scalar_t lambda) {
+      std::vector<scalar_t> lambda_vec) {
       TaskTimer timer("compression");
       if (opts.verbose())
         std::cout << "# starting HSS compression..." << std::endl;
@@ -270,11 +270,9 @@ namespace strumpack {
       }
 
       std::cout << std::endl;
-      std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1, 5e+1};
-      // std::vector<scalar_t> lambda_vec {0., 1.0, 10., 20.};
       int number_weights = lambda_vec.size();
       std::vector<std::vector<scalar_t>> vov_weights;
-      H.shift(-lambda); // Substract original lambda
+      H.shift(-lambda_); // Substract original lambda
       for(auto ilambda: lambda_vec){
         std::cout << "Solving for lambda = " << ilambda << std::endl;
         H.shift(ilambda);
@@ -314,11 +312,12 @@ namespace strumpack {
     }
 
     template<typename scalar_t>
-    DenseMatrix<scalar_t> Kernel<scalar_t>::predict_multiple // shared memory
+    DenseMatrix<scalar_t> Kernel<scalar_t>::predict_multiple // shared memory here
     (const DenseM_t& test, const DenseM_t& weights) const {
       assert(test.rows() == d());
       int m = test.cols();
       int numw = weights.cols();
+      // weights.print("weights_shared",true,10);
       // WARNING: test is read transposed
       // std::cout << "n = " << n() << std::endl;
       // std::cout << "m = " << m << std::endl;
@@ -330,11 +329,16 @@ namespace strumpack {
 
       for(int w = 0; w < numw; w++){
         #pragma omp parallel for
-        for (std::size_t c=0; c<test.cols(); c++)
-          for (std::size_t r=0; r<n(); r++)
+        for (std::size_t c=0; c<test.cols(); c++){
+          for (std::size_t r=0; r<n(); r++){
             prediction(c,w) += weights(r, w) *
-              eval_kernel_function(data_.ptr(0, r), test.ptr(0, c)); // Need to add lambda
+              eval_kernel_function(data_.ptr(0, r), test.ptr(0, c));
+              // std::cout << eval_kernel_function(data_.ptr(0, r), test.ptr(0, c)) << " ";
+          }
+        }
       }
+
+      // prediction.print("prediction", true, 10);
       return prediction;
     }
 
@@ -544,10 +548,11 @@ namespace strumpack {
 
     template<typename scalar_t>
     void Kernel<scalar_t>::getBlock(DistributedMatrix<scalar_t> &_D,
+    const DenseMatrix<scalar_t> &test,
     std::vector<int>& vec_rows, std::vector<int>& vec_cols,
     MPIComm c, BLACSGrid *grid) const {
       using DistM_t = DistributedMatrix<scalar_t>;
-      // Element extraction
+      // MPI Element extraction
       auto Aelem = [&]
         (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
         DistM_t& B, std::size_t rlo, std::size_t clo,
@@ -563,7 +568,17 @@ namespace strumpack {
             lI.push_back(I[i]);
         auto lB = B.dense_wrapper();
         // K->eval_vec(lI, lJ, lB); // operator call
-        eval_vec(lI, lJ, lB); // operator call
+        // eval_vec(lI, lJ, lB); // operator call
+        // if(c.is_root()){
+        //   std::cout <<  "       i_size  = " << lI.size() << std::endl;
+        //   std::cout <<  "       j_size  = " << lJ.size() << std::endl;
+        // }
+        for (auto i=0; i<lI.size(); i++) {
+          for (auto j=0; j<lJ.size(); j++){
+            lB(i, j) = eval_kernel_function(data_.ptr(0, lJ[j]), test.ptr(0, lI[i]));
+          }
+        }
+
       };
 
       int numRows = vec_rows[1] - vec_rows[0];
@@ -582,32 +597,49 @@ namespace strumpack {
     }
 
     template<typename scalar_t>
-    DistributedMatrix<scalar_t> Kernel<scalar_t>::predict_multiple // MPI
+    DistributedMatrix<scalar_t> Kernel<scalar_t>::predict_multiple // MPI here
     (const DenseM_t& test, DistM_t& weights,
     MPIComm c, BLACSGrid *grid) const {
-      int m = weights.rows();
+      int m = test.cols();
       int LB = weights.cols();
-      int NB = std::min(m, int(n()));
+      int NB = std::min(int(n()), int(n())); // m or 50
       int numb_rows = int(std::ceil( scalar_t(m)/scalar_t(LB)));
       int numb_cols = int(std::ceil( scalar_t(n())/ scalar_t(NB)));
+
+      // WARNING: test is read transposed. test = [d x m]
+      if(c.is_root()){
+        std::cout <<  "       m  = " << m << std::endl;
+        std::cout <<  "       n  = " << n() << std::endl;
+        std::cout <<  "       LB = " << LB  << std::endl;
+        std::cout <<  "       NB = " << NB << std::endl;
+        std::cout <<  "numb_rows = " << numb_rows << std::endl;
+        std::cout <<  "numb_cols = " << numb_cols << std::endl;
+      }
+
       // Complete prediction matrix
       DistributedMatrix<scalar_t> matP(grid, m, LB);
       matP.zero();
       for(int ib = 0; ib < numb_rows; ib++){
         std::vector<int> rowRange = getBlockRange(int(m), int(LB), int(ib));
+        // if (c.is_root()) std::cout << c.rank() << "_rowRange = [" << rowRange[0] << ", " << rowRange[1] << "]" << std::endl;
         // Wrapping prediction matrix
         DistributedMatrixWrapper<scalar_t> bP(rowRange[1]-rowRange[0], LB, matP, rowRange[0], 0);
         for(int jb = 0; jb < numb_cols; jb++){
           std::vector<int> colRange = getBlockRange( int(n()), int(NB), int(jb));
+          // if (c.is_root()) std::cout << c.rank() << "_colRange = [" << colRange[0] << ", " << colRange[1] << "]" << std::endl;
           // Wrapping weights matrix
           DistributedMatrixWrapper<scalar_t> bW(colRange[1]-colRange[0], LB, weights, colRange[0], 0);
           // Forming block of Kp matrix (expensive step)
           DistributedMatrix<scalar_t> bKp;
-          getBlock(bKp, rowRange, colRange, c.comm(), grid);
+          getBlock(bKp, test, rowRange, colRange, c.comm(), grid);
+          // bKp.print("bKp",10);
+          // bW.print("bW",10);
           // Perform multiplication
-          gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
+          gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(0.0), bP);
         }
+        // break;
       }
+
       return matP;
     }
 

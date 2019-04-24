@@ -191,7 +191,7 @@ namespace strumpack {
     inline scalar_t all_global(int r, int c) const;
 
     void print() const { print("A"); }
-    void print(std::string name, int precision=15) const;
+    void print(std::string name, bool all, int precision=15) const;
     void print_to_file
     (std::string name, std::string filename,
      int width=8) const;
@@ -899,10 +899,10 @@ namespace strumpack {
   }
 
   template<typename scalar_t> void
-  DistributedMatrix<scalar_t>::print(std::string name, int precision) const {
+  DistributedMatrix<scalar_t>::print(std::string name, bool all, int precision) const {
     if (!active()) return;
     auto tmp = gather();
-    if (is_master()) tmp.print(name, true, precision);
+    if (is_master()) tmp.print(name, all, precision);
   }
 
   template<typename scalar_t> void

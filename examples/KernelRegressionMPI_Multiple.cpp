@@ -178,6 +178,7 @@ int main(int argc, char *argv[]) {
 
     std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1,
      5e+1, 1e+2, 5e+2, 1e+3, 5e+3, 1e+4, 5e+4, 1e+5, 5e+5, 1e+6, 5e+6};
+    // std::vector<scalar_t> lambda_vec {5e-0};
     if (c.is_root()) cout << endl << "# HSS fit_HSS_multiple start..." << endl;
     DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts, lambda_vec);
     if (c.is_root()) cout << "# fit_HSS_multiple took " << timer.elapsed() << endl;
@@ -189,9 +190,14 @@ int main(int argc, char *argv[]) {
     if (c.is_root()) cout << "# predict_multiple took "
       << timer.elapsed() << endl << endl;
 
+    // weights.print("weights", false, 10);
+    prediction.print("prediction", false, 10);
+
+
     // Gather to master/root rank, and compute prediction
     DenseMatrix<scalar_t> local_pred = prediction.gather();
     if(c.is_root()){
+
       // compute accuracy score of prediction
       scalar_t best_cerr = 100.;
       int idx_best_cerr = -1;
@@ -206,7 +212,7 @@ int main(int argc, char *argv[]) {
         cout << "# c-err: " << fixed << setprecision(2)
              << c_err << "%" << "   lambda = "
              << std::scientific << lambda_vec[w] << endl;
-        cout << std::defaultfloat;
+        cout << std::fixed;
         if( c_err <= best_cerr ){
           best_cerr = c_err;
           idx_best_cerr = w;
