@@ -324,21 +324,25 @@ namespace strumpack {
       // std::cout << "w = " << numw << std::endl;
       // std::cout << "test_points(" << test.rows() <<    "," << test.cols()    << ")" << std::endl;
       // std::cout << "weights    (" << weights.rows() << "," << weights.cols() << ")" << std::endl;
-      DenseMatrix<scalar_t> prediction(m,numw);
+      DenseMatrix<scalar_t> prediction(m, numw);
       prediction.zero();
 
+      // DenseMatrix<scalar_t> Kp(n(),m);
       for(int w = 0; w < numw; w++){
         #pragma omp parallel for
         for (std::size_t c=0; c<test.cols(); c++){
           for (std::size_t r=0; r<n(); r++){
             prediction(c,w) += weights(r, w) *
               eval_kernel_function(data_.ptr(0, r), test.ptr(0, c));
-              // std::cout << eval_kernel_function(data_.ptr(0, r), test.ptr(0, c)) << " ";
+            // Kp(r,c) = eval_kernel_function(data_.ptr(0, r), test.ptr(0, c));
+            // Kp(r,c) = eval_kernel_function(data_.ptr(0, r), test.ptr(0, 0));
           }
         }
       }
 
-      // prediction.print("prediction", true, 10);
+      // DenseMatrix<scalar_t>  Kpt = Kp.transpose();
+      // Kpt.print("Kpt", true, 11);
+      // prediction.print("prediction", true, 12);
       return prediction;
     }
 
@@ -552,10 +556,11 @@ namespace strumpack {
     std::vector<int>& vec_rows, std::vector<int>& vec_cols,
     MPIComm c, BLACSGrid *grid) const {
       using DistM_t = DistributedMatrix<scalar_t>;
+
       // MPI Element extraction
       auto Aelem = [&]
         (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
-        DistM_t& B, std::size_t rlo, std::size_t clo,
+        DistM_t& B, std::size_t rlo, std::size_t ,
         MPI_Comm comm) {
         std::vector<std::size_t> lI, lJ;
         lI.reserve(B.lrows());
@@ -568,17 +573,15 @@ namespace strumpack {
             lI.push_back(I[i]);
         auto lB = B.dense_wrapper();
         // K->eval_vec(lI, lJ, lB); // operator call
-        // eval_vec(lI, lJ, lB); // operator call
-        // if(c.is_root()){
-        //   std::cout <<  "       i_size  = " << lI.size() << std::endl;
-        //   std::cout <<  "       j_size  = " << lJ.size() << std::endl;
-        // }
-        for (auto i=0; i<lI.size(); i++) {
+
+        #pragma omp parallel for
+        for (auto i=0; i<lI.size(); i++) {  // here
           for (auto j=0; j<lJ.size(); j++){
             lB(i, j) = eval_kernel_function(data_.ptr(0, lJ[j]), test.ptr(0, lI[i]));
           }
         }
-
+      // coll2g
+      // rowl2g
       };
 
       int numRows = vec_rows[1] - vec_rows[0];
@@ -602,7 +605,7 @@ namespace strumpack {
     MPIComm c, BLACSGrid *grid) const {
       int m = test.cols();
       int LB = weights.cols();
-      int NB = std::min(int(n()), int(n())); // m or 50
+      int NB = std::min(int(n())/2, int(n())); // m or 50
       int numb_rows = int(std::ceil( scalar_t(m)/scalar_t(LB)));
       int numb_cols = int(std::ceil( scalar_t(n())/ scalar_t(NB)));
 
@@ -632,10 +635,10 @@ namespace strumpack {
           // Forming block of Kp matrix (expensive step)
           DistributedMatrix<scalar_t> bKp;
           getBlock(bKp, test, rowRange, colRange, c.comm(), grid);
-          // bKp.print("bKp",10);
+          // bKp.print("bKp", 11);
           // bW.print("bW",10);
           // Perform multiplication
-          gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(0.0), bP);
+          gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
         }
         // break;
       }

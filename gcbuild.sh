@@ -30,6 +30,6 @@ cmake .. \
 -DTPL_LAPACK_LIBRARIES="/usr/local/Cellar/openblas/0.2.20_1/lib/liblapack.dylib" \
 -DTPL_SCALAPACK_LIBRARIES="/Users/gichavez/Documents/local/scalapack-2.0.2/libscalapack.a"
 
-make install VERBOSE=1
+make -j install VERBOSE=1
 cd examples
 make

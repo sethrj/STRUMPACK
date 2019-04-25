@@ -62,9 +62,11 @@ read_from_file(string filename) {
   return data;
 }
 
-void printArr(vector<int> arr){
+template<typename T>
+void printArr(string NAME, int val, vector<T> arr){
+  cout << NAME << " " << val << ": ";
   for(auto x: arr)
-    cout << x << " ";
+    cout << std::fixed << std::setw(3) <<x << " ";
   cout << endl;
 }
 
@@ -87,43 +89,69 @@ std::vector<int> getBlockRange(int n, int size, int rank){
   return range;
 }
 
-void getBlock(std::unique_ptr<Kernel<scalar_t>> &K, DistM_t &_D,
+  // template<typename scalar_t>
+  // void Kernel<scalar_t>::
+  void
+  getBlock(std::unique_ptr<Kernel<scalar_t>> &K, DistributedMatrix<scalar_t> &_D, // here
+  const DenseMatrix<scalar_t> &test,
   std::vector<int>& vec_rows, std::vector<int>& vec_cols,
-  MPIComm c, BLACSGrid *grid){
+  MPIComm c, BLACSGrid *grid) {
+    using DistM_t = DistributedMatrix<scalar_t>;
 
-  // Element extraction
-  auto Aelem = [&]
-    (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
-    DistM_t& B, std::size_t rlo, std::size_t clo,
-    MPI_Comm comm) {
-    std::vector<std::size_t> lI, lJ;
-    lI.reserve(B.lrows());
-    lJ.reserve(B.lcols());
-    for (size_t j=0; j<J.size(); j++)
-      if (B.colg2p(j) == B.pcol())
-        lJ.push_back(J[j]);
-    for (size_t i=0; i<I.size(); i++)
-      if (B.rowg2p(i) == B.prow())
-        lI.push_back(I[i]);
-    auto lB = B.dense_wrapper();
-    K->eval_vec(lI, lJ, lB); // operator call
-  };
+    // MPI Element extraction
+    auto Aelem = [&]
+      (const std::vector<std::size_t>& I, const std::vector<std::size_t>& J,
+      DistM_t& B, std::size_t rlo, std::size_t clo,
+      MPI_Comm comm) {
+      std::vector<std::size_t> lI, lJ;
+      lI.reserve(B.lrows());
+      lJ.reserve(B.lcols());
+      for (size_t j=0; j<J.size(); j++)
+        if (B.colg2p(j) == B.pcol())
+          lJ.push_back(J[j]);
+      for (size_t i=0; i<I.size(); i++)
+        if (B.rowg2p(i) == B.prow())
+          lI.push_back(I[i]);
+      auto lB = B.dense_wrapper();
 
-  // cout << "hello from rank " << c.rank() << endl;
-  int numRows = vec_rows[1] - vec_rows[0];
-  int numCols = vec_cols[1] - vec_cols[0];
-  std::vector<std::size_t> I, J;
-  I.reserve(numRows);
-  J.reserve(numCols);
-  for (std::size_t i=vec_rows[0]; i<vec_rows[1]; i++)
-    I.push_back(i);
-  for (std::size_t j=vec_cols[0]; j<vec_cols[1]; j++)
-    J.push_back(j);
+      // K->eval_vec(lI, lJ, lB); // operator call
+      // eval_vec(lI, lJ, lB); // operator call
 
-  _D = DistM_t(grid, numRows, numCols);
-  // Aelem(I, J, _D, 0, 0, comm);
-  Aelem(I, J, _D, vec_rows[0], vec_cols[0], c.comm());
-}
+      printArr("I",c.rank(),lI);
+      printArr("J",c.rank(),lJ);
+      cout << "r" << c.rank() << "lI.size() = " << lI.size() << endl;
+      cout << "r" << c.rank() << "lJ.size() = " << lJ.size() << endl;
+      // cout << lI[i] << "," << lJ[j] << " ";
+      // coll2g
+      // rowl2g
+
+      for (auto i=0; i<lI.size(); i++) {
+        for (auto j=0; j<lJ.size(); j++){
+          lB(i, j) = K->eval_kernel_function(K->data_.ptr(0, lJ[j]), test.ptr(0, I[i]));
+        }
+      }
+    };
+
+    int numRows = vec_rows[1] - vec_rows[0];
+    int numCols = vec_cols[1] - vec_cols[0];
+    // cout << "numRows =" << numRows << endl;
+    // cout << "numCols =" << numCols << endl;
+
+    std::vector<std::size_t> I, J;
+    I.reserve(numRows);
+    J.reserve(numCols);
+    for (std::size_t i=vec_rows[0]; i<vec_rows[1]; i++)
+      I.push_back(i);
+    for (std::size_t j=vec_cols[0]; j<vec_cols[1]; j++)
+      J.push_back(j);
+
+    _D = DistM_t(grid, numRows, numCols);
+    // Aelem(I, J, _D, 0, 0, comm);
+    Aelem(I, J, _D, vec_rows[0], vec_cols[0], c.comm());
+
+    DistM_t _Dt = _D.transpose();
+    _Dt.print("_Dt", true, 11);
+  }
 
 
 int main(int argc, char *argv[]) {
@@ -179,52 +207,54 @@ int main(int argc, char *argv[]) {
     BLACSGrid grid(c);
     timer.start();
 
-    int LB = 4;
-    int NB = std::min(7, int(n));
+    int LB = int(m);
+    int NB = std::min(int(n), int(n));
     int numb_rows = int(std::ceil( scalar_t(m)/ scalar_t(LB)));
     int numb_cols = int(std::ceil( scalar_t(n)/ scalar_t(NB)));
 
-    // Complete weights matrix
-    DistM_t matW(&grid, n, LB);
-    matW.random();
-
-    // Complete prediction matrix
-    DistM_t matP(&grid, m, LB);
-    matP.zero();
-
-    for(int ib = 0; ib < numb_rows; ib++){
-      vector<int> rowRange = getBlockRange( int(m), int(LB), ib);
-      // Wrapping prediction matrix
-      DistMW_t bP(rowRange[1]-rowRange[0], LB, matP, rowRange[0], 0);
-      // cout << "bP " << rowRange[1]-rowRange[0] << " " << LB << " " << rowRange[0] << " " << 0 << setw(2) << endl;
-      for(int jb = 0; jb < numb_cols; jb++){
-        vector<int> colRange = getBlockRange( int(n), int(NB), jb);
-        // Wrapping weights matrix
-        DistMW_t bW(colRange[1]-colRange[0], LB, matW, colRange[0], 0);
-        // Forming block of Kp matrix
-        DistM_t bKp;
-        getBlock(K, bKp, rowRange, colRange, c.comm(), &grid);
-        // Perform multiplication
-        gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
-      }
+    if (c.is_root()){
+      std::cout <<  "       m  = " << m << std::endl;
+      std::cout <<  "       n  = " << n << std::endl;
+      std::cout <<  "       LB = " << LB  << std::endl;
+      std::cout <<  "       NB = " << NB << std::endl;
+      std::cout <<  "numb_rows = " << numb_rows << std::endl;
+      std::cout <<  "numb_cols = " << numb_cols << std::endl;
     }
 
-    matP.print("matP", 10);
-    // matP = [  % 13x4, ld=13, norm=84.3292
-    //    8.06511    -6.14294    -7.18917    0.396701
-    //  -0.490874    -4.91875    -4.52831    -13.2185
-    //    18.3211    -12.8138     4.63683     -20.602
-    //    -8.9067    -9.20586     4.91434    -29.9827
-    //    3.33663    -14.6793     -4.1877    -11.7964
-    //   -5.55075     5.12141     5.06302    -31.2691
-    //   -4.08691    -14.0636    0.557685  -0.0236432
-    //    1.36855    -6.80911    0.652708    -33.9221
-    //    26.2628    -4.75527      6.0671    -7.38786
-    //   -1.68628     2.38624    -11.7856    -8.67745
-    //  -0.794139     -18.216     9.77954    -13.7402
-    //   -2.27601     0.37386     2.99313    0.845739
-    //     6.8406   -0.423508    -2.59949    -11.5819
-    // ];
+    DistM_t bKp;
+    // vector<int> rowRange{0, 10};
+    // vector<int> colRange{0, 10};
+    vector<int> rowRange = getBlockRange( int(m), 10, 0); // m
+    vector<int> colRange = getBlockRange( int(n), 10, 0);  // n
+    getBlock(K, bKp, test_points, rowRange, colRange, c.comm(), &grid);
+    // bKp.print("bKp",true,10);
+
+    // // Complete weights matrix
+    // DistM_t matW(&grid, n, LB);
+    // matW.random();
+
+    // // Complete prediction matrix
+    // DistM_t matP(&grid, m, LB);
+    // matP.zero();
+
+    // for(int ib = 0; ib < numb_rows; ib++){
+    //   vector<int> rowRange = getBlockRange( int(m), int(LB), ib);
+    //   // Wrapping prediction matrix
+    //   DistMW_t bP(rowRange[1]-rowRange[0], LB, matP, rowRange[0], 0);
+    //   // cout << "bP " << rowRange[1]-rowRange[0] << " " << LB << " " << rowRange[0] << " " << 0 << setw(2) << endl;
+    //   for(int jb = 0; jb < numb_cols; jb++){
+    //     vector<int> colRange = getBlockRange( int(n), int(NB), jb);
+    //     // Wrapping weights matrix
+    //     DistMW_t bW(colRange[1]-colRange[0], LB, matW, colRange[0], 0);
+    //     // Forming block of Kp matrix
+    //     DistM_t bKp;
+    //     getBlock(K, test_points, bKp, rowRange, colRange, c.comm(), &grid);
+    //     // Perform multiplication
+    //     gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
+    //   }
+    // }
+
+    // matP.print("matP", 10);
 
     // cout << K->eval_kernel_function(K->data().ptr(0, ii),
     //   test_points.ptr(0, ii)) << endl;

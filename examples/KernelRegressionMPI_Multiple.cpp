@@ -191,13 +191,12 @@ int main(int argc, char *argv[]) {
       << timer.elapsed() << endl << endl;
 
     // weights.print("weights", false, 10);
-    prediction.print("prediction", false, 10);
+    prediction.print("prediction", false, 12);
 
 
     // Gather to master/root rank, and compute prediction
     DenseMatrix<scalar_t> local_pred = prediction.gather();
     if(c.is_root()){
-
       // compute accuracy score of prediction
       scalar_t best_cerr = 100.;
       int idx_best_cerr = -1;

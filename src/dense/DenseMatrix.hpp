@@ -313,7 +313,7 @@ namespace strumpack {
      * point values, defaults to 8.
      */
     void print_to_file
-    (std::string name, std::string filename, int width=8) const;
+    (std::string name, std::string filename, int width=10) const;
 
     /**
      * Print matrix to a binary file.
@@ -1256,11 +1256,14 @@ namespace strumpack {
   template<typename scalar_t> void
   DenseMatrix<scalar_t>::print(std::string name, bool all, int width) const {
     std::cout << name << " = [  % " << rows() << "x" << cols()
-              << ", ld=" << ld() << ", norm=" << norm() << std::endl;
+              << ", ld=" << ld() << ", norm="
+              << std::setw(width) << std::setprecision(8) << std::fixed
+              << norm() << std::endl;
     if (all || (rows() <= 20 && cols() <= 32)) {
       for (std::size_t i=0; i<rows(); i++) {
         for (std::size_t j=0; j<cols(); j++)
-          std::cout << std::setw(width) << operator()(i,j) << "  ";
+          std::cout << std::setw(width) << std::setprecision(8)
+                    << std::fixed << operator()(i,j) << "  ";
         std::cout << std::endl;
       }
     } else std::cout << " ..." << std::endl;
@@ -1272,7 +1275,7 @@ namespace strumpack {
     std::fstream fs(filename, std::fstream::out);
     fs << name << " = [  % " << rows() << "x" << cols()
        << ", ld=" << ld() << ", norm=" << norm() << std::endl;
-    std::setprecision(16);
+    std::setprecision(15);
     for (std::size_t i=0; i<rows(); i++) {
       for (std::size_t j=0; j<cols(); j++)
         fs << std::setw(width) << operator()(i,j) << "  ";

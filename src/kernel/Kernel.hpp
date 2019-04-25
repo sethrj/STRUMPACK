@@ -308,9 +308,9 @@ namespace strumpack {
       virtual scalar_t eval_kernel_function // TODO: make this protected
       (const scalar_t* x, const scalar_t* y) const = 0;
 
+      DenseM_t& data_; // TODO: make this protected
 
     protected:
-      DenseM_t& data_;
       scalar_t lambda_;
 
     }; // class Kernel

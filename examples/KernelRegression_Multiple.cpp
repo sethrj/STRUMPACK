@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
   cout << "# prediction took " << timer.elapsed() << endl << endl;
 
   // weights.print("weights", false, 10);
-  prediction.print("prediction", false, 10);
+  prediction.print("prediction", false, 12);
 
   // compute accuracy score of prediction
   scalar_t best_cerr = 100.;

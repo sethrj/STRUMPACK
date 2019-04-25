@@ -194,7 +194,7 @@ namespace strumpack {
     void print(std::string name, bool all, int precision=15) const;
     void print_to_file
     (std::string name, std::string filename,
-     int width=8) const;
+     int width=10) const;
     void print_to_binary_file(std::string filename) const;
     void random();
     void random
