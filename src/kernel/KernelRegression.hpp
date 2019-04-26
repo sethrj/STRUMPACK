@@ -574,14 +574,12 @@ namespace strumpack {
         auto lB = B.dense_wrapper();
         // K->eval_vec(lI, lJ, lB); // operator call
 
-        #pragma omp parallel for
+        #pragma omp parallel for collapse(2) num_threads(32)
         for (auto i=0; i<lI.size(); i++) {  // here
           for (auto j=0; j<lJ.size(); j++){
             lB(i, j) = eval_kernel_function(data_.ptr(0, lJ[j]), test.ptr(0, lI[i]));
           }
         }
-      // coll2g
-      // rowl2g
       };
 
       int numRows = vec_rows[1] - vec_rows[0];
@@ -619,6 +617,12 @@ namespace strumpack {
         std::cout <<  "numb_cols = " << numb_cols << std::endl;
       }
 
+      // omp_set_num_threads(32);
+      // if(c.is_root()){
+      //   std::cout << "omp_get_max_threads() = "
+      //             << omp_get_max_threads() << std::endl;
+      // }
+
       // Complete prediction matrix
       DistributedMatrix<scalar_t> matP(grid, m, LB);
       matP.zero();
@@ -641,6 +645,7 @@ namespace strumpack {
           gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
         }
         // break;
+        if(c.is_root()) std::cout << "row " << ib+1 << "/" << numb_rows << std::endl;
       }
 
       return matP;

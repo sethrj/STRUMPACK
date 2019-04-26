@@ -180,7 +180,9 @@ int main(int argc, char *argv[]) {
      5e+1, 1e+2, 5e+2, 1e+3, 5e+3, 1e+4, 5e+4, 1e+5, 5e+5, 1e+6, 5e+6};
     // std::vector<scalar_t> lambda_vec {5e-0};
     if (c.is_root()) cout << endl << "# HSS fit_HSS_multiple start..." << endl;
-    DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts, lambda_vec);
+    // DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts, lambda_vec);
+    DistM_t weights(&g, n, int(lambda_vec.size()));
+    weights.random();
     if (c.is_root()) cout << "# fit_HSS_multiple took " << timer.elapsed() << endl;
 
     if (c.is_root()) cout << endl << "# HSS predict_multiple start..." << endl;
@@ -230,7 +232,7 @@ int main(int argc, char *argv[]) {
       << std::endl << std::endl;
   } // comm
 
-  // print_dense_counter_MPI("SANITY counter", c);
+  print_dense_counter_MPI("SANITY counter", c);
   MPI_Finalize();
   return 0;
 }
