@@ -645,7 +645,7 @@ namespace strumpack {
           gemm(Trans::N, Trans::N, scalar_t(1.0), bKp, bW, scalar_t(1.0), bP);
         }
         // break;
-        if(c.is_root()) std::cout << "row " << ib+1 << "/" << numb_rows << std::endl;
+        // if(c.is_root()) std::cout << "row " << ib+1 << "/" << numb_rows << std::endl;
       }
 
       return matP;

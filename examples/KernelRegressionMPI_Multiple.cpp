@@ -176,13 +176,17 @@ int main(int argc, char *argv[]) {
     BLACSGrid g(c);
     timer.start();
 
-    std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1,
-     5e+1, 1e+2, 5e+2, 1e+3, 5e+3, 1e+4, 5e+4, 1e+5, 5e+5, 1e+6, 5e+6};
-    // std::vector<scalar_t> lambda_vec {5e-0};
+    std::vector<scalar_t> lambda_vec {
+      1e0, 3e0, 6e0, 9e0,
+      1e1, 3e1, 6e1, 9e1,
+      1e2, 3e2, 6e2, 9e2,
+      1e3, 3e3, 6e3, 9e3
+    };
+    // std::vector<scalar_t> lambda_vec {.1,.2,.3,.4,.5,.6,.7,.8,.9,1.0,1.1,1.2,1.3,1.4,1.5};
     if (c.is_root()) cout << endl << "# HSS fit_HSS_multiple start..." << endl;
-    // DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts, lambda_vec);
-    DistM_t weights(&g, n, int(lambda_vec.size()));
-    weights.random();
+    DistM_t weights = K->fit_HSS_multiple(g, train_labels, opts, lambda_vec);
+    // DistM_t weights(&g, n, int(lambda_vec.size()));
+    // weights.random();
     if (c.is_root()) cout << "# fit_HSS_multiple took " << timer.elapsed() << endl;
 
     if (c.is_root()) cout << endl << "# HSS predict_multiple start..." << endl;

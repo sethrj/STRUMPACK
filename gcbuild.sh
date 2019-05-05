@@ -6,14 +6,14 @@ fi
 cd build
 
 cmake .. \
--DCMAKE_BUILD_TYPE=Debug \
+-DCMAKE_BUILD_TYPE=Release \
 -DCMAKE_INSTALL_PREFIX=. \
 -DCMAKE_C_COMPILER=/Users/gichavez/Documents/local/openmpi-2.1.1/build/bin/mpicc \
 -DCMAKE_CXX_COMPILER=/Users/gichavez/Documents/local/openmpi-2.1.1/build/bin/mpicxx \
 -DCMAKE_Fortran_COMPILER=/Users/gichavez/Documents/local/openmpi-2.1.1/build/bin/mpifort \
 -DSTRUMPACK_USE_MPI=ON \
 -DSTRUMPACK_USE_OPENMP=ON \
--DSTRUMPACK_COUNT_FLOPS=ON \
+-DSTRUMPACK_COUNT_FLOPS=OFF \
 -DMY_FLAGS="-DPRINT_COUNTERS=0" \
 -DBUILD_SHARED_LIBS=OFF \
 -DSTRUMPACK_USE_SCOTCH=OFF \
