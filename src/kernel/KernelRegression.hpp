@@ -522,7 +522,7 @@ namespace strumpack {
         H.solve(ULV, weight);
         if (c.is_root())
           std::cout << "# HSS_solve_time = " << timer.elapsed()
-                    << std::endl  << std::endl;
+                    << std::endl;
 
         weights.hconcat(weight);
         H.shift(-ilambda);

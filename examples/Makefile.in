@@ -1,4 +1,4 @@
-all: KernelRegressionMPI_Multiple SandboxMPI KernelRegression_Multiple
+all: KernelRegressionMPI_Multiple KernelRegressionMPI SandboxMPI KernelRegression_Multiple
 
 CC=@STRUMPACK_C_COMPILER@
 CXX=@STRUMPACK_CXX_COMPILER@

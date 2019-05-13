@@ -106,8 +106,12 @@ int main(int argc, char *argv[]) {
   DenseMatrixWrapper<scalar_t> training_points(d, n, training.data(), d),
                                test_points(d, m, testing.data(), d);
 
-  std::vector<scalar_t> lambda_vec {1e-2, 5e-2, 1e-1, 5e-1, 1e-0, 5e-0, 1e+1,
-    5e+1, 1e+2, 5e+2, 1e+3, 5e+3, 1e+4, 5e+4, 1e+5, 5e+5, 1e+6, 5e+6};
+  std::vector<scalar_t> lambda_vec {
+    1e0, 3e0, 6e0, 9e0,
+    1e1, 3e1, 6e1, 9e1,
+    1e2, 3e2, 6e2, 9e2,
+    1e3, 3e3, 6e3, 9e3
+  };
   // std::vector<scalar_t> lambda_vec {5e-0};
 
   auto K = create_kernel<scalar_t>(ktype, training_points, h, lambda);
@@ -119,7 +123,7 @@ int main(int argc, char *argv[]) {
   cout << "# prediction took " << timer.elapsed() << endl << endl;
 
   // weights.print("weights", false, 10);
-  prediction.print("prediction", false, 12);
+  // prediction.print("prediction", false, 12);
 
   // compute accuracy score of prediction
   scalar_t best_cerr = 100.;
@@ -153,5 +157,6 @@ int main(int argc, char *argv[]) {
   std::cout << "# total_time: "
   << std::fixed << std::setw(2) << total_time.elapsed()
   << std::endl << std::endl;
+
   return 0;
   }

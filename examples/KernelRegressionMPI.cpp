@@ -221,7 +221,7 @@ int main(int argc, char *argv[]) {
     std::cout << "# total_time: "
       << timer_all.elapsed() << std::endl << std::endl;
   }
-  print_dense_counter_MPI("SANITY counter", c);
+  // print_dense_counter_MPI("SANITY counter", c);
   MPI_Finalize();
   return 0;
 }
