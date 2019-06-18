@@ -2103,6 +2103,25 @@ namespace strumpack {
          b.data(), b.ld(), beta, c, ldc);
   }
 
+ template<typename scalar_t> void
+  cuda_gemm(Trans ta, Trans tb, scalar_t alpha, const DenseMatrix<scalar_t>& a,
+       const DenseMatrix<scalar_t>& b, scalar_t beta,
+       DenseMatrix<scalar_t>& c, int depth=0) {
+    assert((ta==Trans::N && a.rows()==c.rows()) ||
+           (ta!=Trans::N && a.cols()==c.rows()));
+    assert((tb==Trans::N && b.cols()==c.cols()) ||
+           (tb!=Trans::N && b.rows()==c.cols()));
+    assert((ta==Trans::N && tb==Trans::N && a.cols()==b.rows()) ||
+           (ta!=Trans::N && tb==Trans::N && a.rows()==b.rows()) ||
+           (ta==Trans::N && tb!=Trans::N && a.cols()==b.cols()) ||
+           (ta!=Trans::N && tb!=Trans::N && a.rows()==b.cols()));
+    blas::cuda_gemm
+      (char(ta), char(tb), c.rows(), c.cols(),
+       (ta==Trans::N) ? a.cols() : a.rows(), alpha, a.data(), a.ld(),
+       b.data(), b.ld(), beta, c.data(), c.ld());
+  }
+
+
   /**
    * TRMM performs one of the matrix-matrix operations
    *

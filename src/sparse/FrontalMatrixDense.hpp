@@ -255,7 +255,7 @@ namespace strumpack {
              scalar_t(1.), F11_, F12_, task_depth);
         trsm(Side::R, UpLo::U, Trans::N, Diag::N,
              scalar_t(1.), F11_, F21_, task_depth);
-        gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,
+        cuda_gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,
              scalar_t(1.), F22_, task_depth);
       }
     }

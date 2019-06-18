@@ -34,8 +34,10 @@
 #include <iostream>
 #include <cassert>
 #include <memory>
+#include <cuda_runtime.h>
 #include "StrumpackParameters.hpp"
 #include "StrumpackFortranCInterface.h"
+#include "cublas_v2.h"
 
 namespace strumpack {
 
@@ -904,6 +906,55 @@ namespace strumpack {
       STRUMPACK_FLOPS(4*gemm_flops(m,n,k,alpha,beta));
       STRUMPACK_BYTES(2*8*gemm_moves(m,n,k));
     }
+
+    inline void cuda_gemm
+    (char ta, char tb, int m, int n, int k, double alpha,
+     const double *a, int lda, const double *b, int ldb,
+     double beta, double *c, int ldc) {
+
+      cublasHandle_t  handle;                        //  CUBLAS  context
+      cublasStatus_t  stat;                //  CUBLAS  functions  status
+      cudaError_t  cudaStat;                      //  cudaMalloc  status
+
+      double* d_a;                             // d_a - a on the  device
+      double* d_b;                             // d_b - b on the  device
+      double* d_c;                             // d_c - c on the  device
+
+      cudaStat=cudaMalloc ((void **)&d_a ,m*k*sizeof (*a));   // device//  memory  alloc  for a
+      cudaStat=cudaMalloc ((void **)&d_b ,k*n*sizeof (*b));   // device//  memory  alloc  for b
+      cudaStat=cudaMalloc ((void **)&d_c ,m*n*sizeof (*c));   // device//  memory  alloc  for c
+      stat = cublasCreate(&handle);   //  initialize  CUBLAS  context
+
+      stat = cublasSetMatrix(m,k,sizeof (*a),a,m,d_a ,m);//a -> d_a
+      stat = cublasSetMatrix(k,n,sizeof (*b),b,k,d_b ,k);//b -> d_b
+      stat = cublasSetMatrix(m,n,sizeof (*c),c,m,d_c ,m);//c -> d_c
+
+      stat = cublasDgemm(handle, (cublasOperation_t)ta, (cublasOperation_t)tb,
+              m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc);
+      stat = cublasGetMatrix(m,n,sizeof(*c),d_c,m,c,m); //cp d_c->c
+
+      STRUMPACK_FLOPS(gemm_flops(m,n,k,alpha,beta));
+      STRUMPACK_BYTES(8*gemm_moves(m,n,k));
+    }
+
+
+    inline void cuda_gemm
+    (char ta, char tb, int m, int n, int k, float alpha,
+     const float *a, int lda, const float *b, int ldb,
+     float beta, float *c, int ldc) {}
+
+
+    inline void cuda_gemm
+    (char ta, char tb, int m, int n, int k, std::complex<float> alpha,
+     const std::complex<float> *a, int lda, const std::complex<float> *b, int ldb,
+     std::complex<float> beta, std::complex<float> *c, int ldc) {}
+
+
+
+    inline void cuda_gemm
+    (char ta, char tb, int m, int n, int k, std::complex<double> alpha,
+     const std::complex<double> *a, int lda, const float *b, int ldb,
+     std::complex<double> beta, float *c, int ldc) {}
 
 
     template<typename scalar> inline long long gemv_flops
