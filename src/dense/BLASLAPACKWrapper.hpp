@@ -907,6 +907,17 @@ namespace strumpack {
       STRUMPACK_BYTES(2*8*gemm_moves(m,n,k));
     }
 
+
+
+    inline cublasOperation_t OpToCudaOp(char op) {
+        switch (op) {
+            case 'N': case 'n': return CUBLAS_OP_N;
+            case 'T': case 't': return CUBLAS_OP_T;
+            case 'C': case 'c': return CUBLAS_OP_C;
+            default: return CUBLAS_OP_N;
+        }
+    }
+
     inline void cuda_gemm
     (char ta, char tb, int m, int n, int k, double alpha,
      const double *a, int lda, const double *b, int ldb,
@@ -925,14 +936,35 @@ namespace strumpack {
       cudaStat=cudaMalloc ((void **)&d_c ,m*n*sizeof (*c));   // device//  memory  alloc  for c
       stat = cublasCreate(&handle);   //  initialize  CUBLAS  context
 
+      if (stat != CUBLAS_STATUS_SUCCESS) {
+          if (stat == CUBLAS_STATUS_NOT_INITIALIZED) {
+              std::cout << "Cuda Runtime Initialization failed" << std::endl;
+          }
+          if (stat == CUBLAS_STATUS_ALLOC_FAILED) {
+              std::cout << "Resources could not be allocated" << std::endl;
+          }
+      }
+      
       stat = cublasSetMatrix(m,k,sizeof (*a),a,m,d_a ,m);//a -> d_a
       stat = cublasSetMatrix(k,n,sizeof (*b),b,k,d_b ,k);//b -> d_b
       stat = cublasSetMatrix(m,n,sizeof (*c),c,m,d_c ,m);//c -> d_c
 
-      stat = cublasDgemm(handle, (cublasOperation_t)ta, (cublasOperation_t)tb,
+
+
+//      stat = cublasDgemm(handle, (cublasOperation_t)ta, (cublasOperation_t)tb,
+ //             m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc);
+      stat = cublasDgemm(handle, OpToCudaOp(ta), OpToCudaOp(tb),
               m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc);
       stat = cublasGetMatrix(m,n,sizeof(*c),d_c,m,c,m); //cp d_c->c
 
+      cudaFree(d_a);
+      cudaFree(d_b);
+      cudaFree(d_c);
+      cublasDestroy(handle);
+     // free(a);
+     // free(b);
+     // free(c);
+     // 
       STRUMPACK_FLOPS(gemm_flops(m,n,k,alpha,beta));
       STRUMPACK_BYTES(8*gemm_moves(m,n,k));
     }
