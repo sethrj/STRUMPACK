@@ -34,10 +34,12 @@
 #include <iostream>
 #include <cassert>
 #include <memory>
-#include <cuda_runtime.h>
 #include "StrumpackParameters.hpp"
 #include "StrumpackFortranCInterface.h"
+#if defined(STRUMPACK_USE_CUDA)
 #include "cublas_v2.h"
+#include <cuda_runtime.h>
+#endif
 
 namespace strumpack {
 
@@ -909,6 +911,7 @@ namespace strumpack {
 
 
 
+#if defined(STRUMPACK_USE_CUDA)
     inline cublasOperation_t OpToCudaOp(char op) {
         switch (op) {
             case 'N': case 'n': return CUBLAS_OP_N;
@@ -917,7 +920,7 @@ namespace strumpack {
             default: return CUBLAS_OP_N;
         }
     }
-
+    
     inline void cuda_gemm
     (char ta, char tb, int m, int n, int k, double alpha,
      const double *a, int lda, const double *b, int ldb,
@@ -968,7 +971,7 @@ namespace strumpack {
       STRUMPACK_FLOPS(gemm_flops(m,n,k,alpha,beta));
       STRUMPACK_BYTES(8*gemm_moves(m,n,k));
     }
-
+#endif
 
     inline void cuda_gemm
     (char ta, char tb, int m, int n, int k, float alpha,
