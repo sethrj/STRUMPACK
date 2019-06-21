@@ -264,9 +264,8 @@ namespace strumpack {
              gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,	
                   scalar_t(1.), F22_, task_depth);
         }
-        
 #else
-        gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,	
+        gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,
              scalar_t(1.), F22_, task_depth);
 #endif
       }

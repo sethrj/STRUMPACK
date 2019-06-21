@@ -109,6 +109,10 @@ namespace strumpack {
 #if defined(STRUMPACK_USE_SLATE_SCALAPACK)
     slate::Matrix<scalar_t> slateF11_, slateF12_, slateF21_, slateF22_;
     slate::Pivots slate_piv_;
+#if defined(STRUMPACK_USE_CUDA)
+    std::map<slate::Option, slate::Value> slate_opts_ =
+      {{slate::Option::Target, slate::Target::Devices}};
+#else
     std::map<slate::Option, slate::Value> slate_opts_;
 #endif
 
@@ -204,26 +208,16 @@ namespace strumpack {
   FrontalMatrixDenseMPI<scalar_t,integer_t>::partial_factorization() {
     if (this->dim_sep() && grid()->active()) {
 #if defined(STRUMPACK_USE_SLATE_SCALAPACK)
-      std::map<slate::Option, slate::Value> slate_opts = {{slate::Option::Target, slate::Target::Devices}};
-      slate::getrf(slateF11_, slate_piv_, slate_opts);
+      slate::getrf(slateF11_, slate_piv_, slate_opts_);
 #else
       piv = F11_.LU();
 #endif
       STRUMPACK_FULL_RANK_FLOPS(LU_flops(F11_));
       if (this->dim_upd()) {
 #if defined(STRUMPACK_USE_SLATE_SCALAPACK)
-        // F12_.laswp(piv, true);
-
-        // slate::TriangularMatrix<scalar_t> F11_L
-        //   (slate::Uplo::Lower, slate::Diag::Unit, slateF11_);
-        // slate::trsm(slate::Side::Left, scalar_t(1.), F11_L, slateF12_, slate_opts);
-        // slate::TriangularMatrix<scalar_t> F11_U
-        //   (slate::Uplo::Upper, slate::Diag::NonUnit, slateF11_);
-        // slate::trsm(slate::Side::Right, scalar_t(1.), F11_U, slateF21_, slate_opts);
-
-	slate::getrs(slateF11_, slate_piv_, slateF12_);
-	slate::gemm(scalar_t(-1.), slateF21_, slateF12_,
-                    scalar_t(1.), slateF22_, slate_opts);
+        slate::getrs(slateF11_, slate_piv_, slateF12_, slate_opts_);
+        slate::gemm(scalar_t(-1.), slateF21_, slateF12_,
+                    scalar_t(1.), slateF22_, slate_opts_);
 #else
         F12_.laswp(piv, true);
         trsm(Side::L, UpLo::L, Trans::N, Diag::U, scalar_t(1.), F11_, F12_);
@@ -283,7 +277,7 @@ namespace strumpack {
         auto sbupd = slate::Matrix<scalar_t>::fromScaLAPACK
           (bupd.rows(), bupd.cols(), bupd.data(), bupd.ld(),
            bupd.MB(), bupd.nprows(), bupd.npcols(), bupd.comm());
-	slate::gemm
+        slate::gemm
           (scalar_t(-1.), const_cast<slate::Matrix<scalar_t>&>(slateF21_),
            sbloc, scalar_t(1.), sbupd, slate_opts_);
       }
