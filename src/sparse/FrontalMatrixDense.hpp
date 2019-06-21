@@ -256,7 +256,8 @@ namespace strumpack {
         trsm(Side::R, UpLo::U, Trans::N, Diag::N,
              scalar_t(1.), F11_, F21_, task_depth);
 #if defined(STRUMPACK_USE_CUDA)
-        if (F22_.rows() * F22_.cols() > 1000000) {
+        if (F22_.rows() * F22_.cols() > 10000) {
+            //std::cout << "Calling cuda_gemm" << std::endl;
             cuda_gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,
                       scalar_t(1.), F22_, task_depth);
         } else {
