@@ -319,7 +319,7 @@ namespace strumpack {
       //cudaError_t memcpy1 = cudaMemcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
       //cudaError_t memcpy2 = cudaMemcpy(h_F12_, F12_.data(), F12_.rows()*F12_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
       //cudaError_t memcpy3 = cudaMemcpy(h_F21_, F21_.data(), F21_.rows()*F21_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-      //cudaError_t memcpy4 = cudaMemcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+      //cudaError_t memcpy4 = cudaMemcpy(h_F22_, F22_.data(), F22_.rows()*F22_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
       //cudaError_t memset = cudaMemset(h_F11_piv, 0, minsize*sizeof(int));
 
       //assert(memcpy1 == cudaSuccess);
@@ -331,7 +331,7 @@ namespace strumpack {
       std::memcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t));
       std::memcpy(h_F12_, F12_.data(), F12_.rows()*F12_.cols()*sizeof(scalar_t));
       std::memcpy(h_F21_, F21_.data(), F21_.rows()*F21_.cols()*sizeof(scalar_t));
-      std::memcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t));
+      std::memcpy(h_F22_, F22_.data(), F22_.rows()*F22_.cols()*sizeof(scalar_t));
 
       static std::size_t total_size_buff_dev_bytes = 0;
       static double *buff_dev = nullptr;
