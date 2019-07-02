@@ -445,7 +445,7 @@ namespace strumpack {
         //cudaStreamSynchronize(F11_stream);
         
         stat = cublasDgemm(schur_handle, CUBLAS_OP_N, CUBLAS_OP_N, 
-                           F21_.rows(), F21_.cols(), F12_.rows(), 
+                           F22_.rows(), F22_.cols(), F12_.rows(), 
                            &alpha, d_F21_, F21_.ld(), 
                            d_F12_, F12_.ld(), &beta, 
                            d_F22_, F22_.ld());
