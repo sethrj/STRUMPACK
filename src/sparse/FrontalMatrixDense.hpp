@@ -587,7 +587,7 @@ namespace strumpack {
        // cublasGetVector(piv.size(), sizeof(int), d_F11_piv, 1, const_cast<int *>(piv.data()), 1);
        // 
        // cusolverDnDestroy(handle);
-        F11_.solve(bloc, piv, task_depth);
+        F11_.solve_LU_in_place(bloc, piv, task_depth);
         if (dim_upd()) {  
           gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, bloc,
                scalar_t(1.), bupd, task_depth);
