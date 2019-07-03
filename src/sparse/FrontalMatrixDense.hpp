@@ -913,17 +913,21 @@ namespace strumpack {
       setup_level(A, opts, ldata, l);
       auto nnodes = ldata.f.size();
 
-      std::size_t factor_mem = 0;
+      std::size_t factor_mem = 0, schur_mem = 0;
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
         const auto dupd = f.dim_upd();
-        factor_mem += dsep * dsep + 2*dsep*dupd + dupd*dupd;
+        factor_mem += dsep*dsep + 2*dsep*dupd;
+        schur_mem += dupd*dupd;
       }
       if (opts.verbose())
         std::cout << "#      level " << l << " of " << lvls
                   << " has " << ldata.f.size() << " nodes, needs "
-                  << factor_mem
+                  << factor_mem * sizeof(scalar_t) / 1.e6
+                  << " MB for factors, "
+                  << schur_mem * sizeof(scalar_t) / 1.e6
+                  << " MB for Schur complements"
                   << std::endl;
 
       // TODO do this with a batched call
