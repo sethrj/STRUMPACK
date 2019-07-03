@@ -268,26 +268,26 @@ namespace strumpack {
       cublasStatus_t stat; 
 
       stat = cublasCreate(&schur_handle);
-      //cudaEventCreate(&LU_event);
+      cudaEventCreate(&LU_event);
 
-      //cudaStream_t F11_stream;
-      //cudaStream_t schur_stream;
-      //cudaError_t stream_result;
+      cudaStream_t F11_stream;
+      cudaStream_t schur_stream;
+      cudaError_t stream_result;
 
-      //stream_result = cudaStreamCreate(&F11_stream);
-      //stream_result = cudaStreamCreate(&schur_stream);
+      stream_result = cudaStreamCreate(&F11_stream);
+      stream_result = cudaStreamCreate(&schur_stream);
 
       double* F11_work;
       int F11_worksize;
       int *F11_piv, minsize, *F11_err;
       
       cusolverDnCreate(&F11_handle);
-      //cusolverDnSetStream(F11_handle, F11_stream);
+      cusolverDnSetStream(F11_handle, F11_stream);
       
       if (F11_.rows() >= F11_.cols()) {
-          minsize = F11_.cols();
+        minsize = F11_.cols();
       } else {
-          minsize = F11_.rows();
+        minsize = F11_.rows();
       }
 
       std::size_t size = F12_.rows()*F12_.cols() +
@@ -298,15 +298,12 @@ namespace strumpack {
       static std::size_t total_size_buff_host_bytes = 0;
       static double *buff_host = nullptr;
       std::size_t new_total_size_buff_host_bytes = size*sizeof(scalar_t) + minsize*sizeof(int);
-
+       
       if (new_total_size_buff_host_bytes > total_size_buff_host_bytes) {
-          total_size_buff_host_bytes = new_total_size_buff_host_bytes;
-          //if(buff_host) cudaFree(buff_host);
-          if(buff_host) free(buff_host);
-          buff_host = (double *) malloc(new_total_size_buff_host_bytes);
-	 // std::cout << "reallocating work array to size " << new_total_size_buff_host_bytes << std::endl;
-         // cudaError_t buff_host_err = cudaMallocHost((void **)&buff_host, new_total_size_buff_host_bytes);
-         // assert(buff_host_err == cudaSuccess);
+        total_size_buff_host_bytes = new_total_size_buff_host_bytes;
+        if(buff_host) cudaFree(buff_host);
+        cudaError_t buff_host_err = cudaMallocHost((void **)&buff_host, new_total_size_buff_host_bytes);
+        assert(buff_host_err == cudaSuccess);
       }
 
       double* h_F11_ = buff_host;
@@ -316,34 +313,27 @@ namespace strumpack {
       int* h_F11_piv = (int *)(h_F22_ + F22_.rows()*F22_.cols());
 
 
-      //cudaError_t memcpy1 = cudaMemcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-      //cudaError_t memcpy2 = cudaMemcpy(h_F12_, F12_.data(), F12_.rows()*F12_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-      //cudaError_t memcpy3 = cudaMemcpy(h_F21_, F21_.data(), F21_.rows()*F21_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-      //cudaError_t memcpy4 = cudaMemcpy(h_F22_, F22_.data(), F22_.rows()*F22_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-      //cudaError_t memset = cudaMemset(h_F11_piv, 0, minsize*sizeof(int));
+      cudaError_t memcpy1 = cudaMemcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+      cudaError_t memcpy2 = cudaMemcpy(h_F12_, F12_.data(), F12_.rows()*F12_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+      cudaError_t memcpy3 = cudaMemcpy(h_F21_, F21_.data(), F21_.rows()*F21_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+      cudaError_t memcpy4 = cudaMemcpy(h_F22_, F22_.data(), F22_.rows()*F22_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+      cudaError_t memset = cudaMemset(h_F11_piv, 0, minsize*sizeof(int));
 
-      //assert(memcpy1 == cudaSuccess);
-      //assert(memcpy2 == cudaSuccess);
-      //assert(memcpy3 == cudaSuccess);
-      //assert(memcpy4 == cudaSuccess);
-      //assert(memset == cudaSuccess);
-
-      std::memcpy(h_F11_, F11_.data(), F11_.rows()*F11_.cols()*sizeof(scalar_t));
-      std::memcpy(h_F12_, F12_.data(), F12_.rows()*F12_.cols()*sizeof(scalar_t));
-      std::memcpy(h_F21_, F21_.data(), F21_.rows()*F21_.cols()*sizeof(scalar_t));
-      std::memcpy(h_F22_, F22_.data(), F22_.rows()*F22_.cols()*sizeof(scalar_t));
+      assert(memcpy1 == cudaSuccess);
+      assert(memcpy2 == cudaSuccess);
+      assert(memcpy3 == cudaSuccess);
+      assert(memcpy4 == cudaSuccess);
+      assert(memset == cudaSuccess);
 
       static std::size_t total_size_buff_dev_bytes = 0;
       static double *buff_dev = nullptr;
       std::size_t new_total_size_buff_dev_bytes = size*sizeof(scalar_t) + minsize*sizeof(int);
 
       if (new_total_size_buff_dev_bytes > total_size_buff_dev_bytes) {
-          //std::cout << "Increasing device buffer from " << total_size_buff_dev_bytes << " bytes to " << new_total_size_buff_dev_bytes << std::endl;
-          total_size_buff_dev_bytes = new_total_size_buff_dev_bytes;
-          if(buff_dev) cudaFree(buff_dev);
-          cudaError_t buff_dev_err = cudaMalloc((void **)&buff_dev, new_total_size_buff_dev_bytes);
-          assert(buff_dev_err == cudaSuccess);
-          //std::cout << "Workspace cudaMalloc status returned: " << cudaStat << std::endl;
+        total_size_buff_dev_bytes = new_total_size_buff_dev_bytes;
+        if(buff_dev) cudaFree(buff_dev);
+        cudaError_t buff_dev_err = cudaMalloc((void **)&buff_dev, new_total_size_buff_dev_bytes);
+        assert(buff_dev_err == cudaSuccess);
       }
       
       double* d_F11_ = buff_dev;
@@ -354,26 +344,15 @@ namespace strumpack {
       F11_piv =(int *)(d_F22_ + F22_.rows()*F22_.cols());
       F11_err = F11_piv + minsize*sizeof(int);
 
-//      cublasStatus_t stat1 = cublasSetMatrixAsync(F11_.rows(), F11_.cols(),sizeof(scalar_t), h_F11_, F11_.ld(), d_F11_, F11_.ld(), F11_stream);
-//      cublasStatus_t stat2 = cublasSetMatrixAsync(F12_.rows(), F12_.cols(),sizeof(scalar_t), h_F12_, F12_.ld(), d_F12_, F12_.ld(), schur_stream);
-//      cublasStatus_t stat3 = cublasSetMatrixAsync(F21_.rows(), F21_.cols(),sizeof(scalar_t), h_F21_, F21_.ld(), d_F21_, F21_.ld(), schur_stream);
-//      cublasStatus_t stat4 = cublasSetMatrixAsync(F22_.rows(), F22_.cols(),sizeof(scalar_t), h_F22_, F22_.ld(), d_F22_, F22_.ld(), schur_stream);
-
-      cublasStatus_t stat1 = cublasSetMatrix(F11_.rows(), F11_.cols(),sizeof(scalar_t), h_F11_, F11_.ld(), d_F11_, F11_.ld());
-      cublasStatus_t stat2 = cublasSetMatrix(F12_.rows(), F12_.cols(),sizeof(scalar_t), h_F12_, F12_.ld(), d_F12_, F12_.ld());
-      cublasStatus_t stat3 = cublasSetMatrix(F21_.rows(), F21_.cols(),sizeof(scalar_t), h_F21_, F21_.ld(), d_F21_, F21_.ld());
-      cublasStatus_t stat4 = cublasSetMatrix(F22_.rows(), F22_.cols(),sizeof(scalar_t), h_F22_, F22_.ld(), d_F22_, F22_.ld());
-      //memset = cudaMemset(F11_piv, 0, minsize*sizeof(int));
+      cublasStatus_t stat1 = cublasSetMatrixAsync(F11_.rows(), F11_.cols(),sizeof(scalar_t), h_F11_, F11_.ld(), d_F11_, F11_.ld(), F11_stream);
+      cublasStatus_t stat2 = cublasSetMatrixAsync(F12_.rows(), F12_.cols(),sizeof(scalar_t), h_F12_, F12_.ld(), d_F12_, F12_.ld(), schur_stream);
+      cublasStatus_t stat3 = cublasSetMatrixAsync(F21_.rows(), F21_.cols(),sizeof(scalar_t), h_F21_, F21_.ld(), d_F21_, F21_.ld(), schur_stream);
+      cublasStatus_t stat4 = cublasSetMatrixAsync(F22_.rows(), F22_.cols(),sizeof(scalar_t), h_F22_, F22_.ld(), d_F22_, F22_.ld(), schur_stream);
 
       assert(stat1 == CUBLAS_STATUS_SUCCESS);
       assert(stat2 == CUBLAS_STATUS_SUCCESS);
       assert(stat3 == CUBLAS_STATUS_SUCCESS);
       assert(stat4 == CUBLAS_STATUS_SUCCESS);
-
-      //std::cout << "cublasSetMatrix for F11 returned error code of " << stat1 << std::endl;
-      //std::cout << "cublasSetMatrix for F12 returned error code of " << stat2 << std::endl;
-      //std::cout << "cublasSetMatrix for F21 returned error code of " << stat3 << std::endl;
-      //std::cout << "cublasSetMatrix for F22 returned error code of " << stat4 << std::endl;
 
       static std::size_t total_size_workspace = 0;
       static double *workspace = nullptr;
@@ -381,114 +360,95 @@ namespace strumpack {
       std::size_t new_total_size_workspace = F11_worksize;
 
       if (new_total_size_workspace > total_size_workspace) {
-          total_size_workspace = new_total_size_workspace;
-          if (workspace) cudaFree(workspace);
-          cudaError_t workspace_err = cudaMalloc((void **)&workspace, new_total_size_workspace*sizeof(double));
-          assert(workspace_err == cudaSuccess); 
-          //std::cout << "Workspace cudaMalloc status returned: " << cudaStat << std::endl;
+        total_size_workspace = new_total_size_workspace;
+        if (workspace) cudaFree(workspace);
+        cudaError_t workspace_err = cudaMalloc((void **)&workspace, new_total_size_workspace*sizeof(double));
+        assert(workspace_err == cudaSuccess); 
       }
 
       if (stat != CUBLAS_STATUS_SUCCESS) {
-          if (stat == CUBLAS_STATUS_NOT_INITIALIZED) {
-              std::cout << "Cuda Runtime Initialization failed" << std::endl;
-          }
-          if (stat == CUBLAS_STATUS_ALLOC_FAILED) {
-              std::cout << "Resources could not be allocated" << std::endl;
-          }
+        if (stat == CUBLAS_STATUS_NOT_INITIALIZED) {
+          std::cout << "Cuda Runtime Initialization failed" << std::endl;
+        }
+        if (stat == CUBLAS_STATUS_ALLOC_FAILED) {
+          std::cout << "Resources could not be allocated" << std::endl;
+        }
       }
          
-    if (dim_sep()) {
-       
-      //hard-coded double
-        
-        
-      LU_stat = cusolverDnDgetrf(F11_handle, F11_.rows(), F11_.cols(), d_F11_, F11_.ld(), workspace, F11_piv, F11_err);
-      assert(LU_stat == CUSOLVER_STATUS_SUCCESS);
-      //cudaError_t eventerr1 = cudaEventRecord(LU_event, F11_stream);
-      //assert(eventerr1 == cudaSuccess);
+      if (dim_sep()) {
+         
+        LU_stat = cusolverDnDgetrf(F11_handle, F11_.rows(), F11_.cols(), d_F11_, F11_.ld(), workspace, F11_piv, F11_err);
+        assert(LU_stat == CUSOLVER_STATUS_SUCCESS);
+        cudaError_t eventerr1 = cudaEventRecord(LU_event, F11_stream);
+        assert(eventerr1 == cudaSuccess);
 
-      // TODO async?
-      stat1 = cublasGetMatrix(F11_.rows(), F11_.cols(), sizeof(scalar_t), d_F11_, F11_.ld(), h_F11_, F11_.ld());
-      assert(stat1 == CUBLAS_STATUS_SUCCESS);
+        // TODO async?
+        stat1 = cublasGetMatrix(F11_.rows(), F11_.cols(), sizeof(scalar_t), d_F11_, F11_.ld(), h_F11_, F11_.ld());
+        assert(stat1 == CUBLAS_STATUS_SUCCESS);
 
-      cublasGetVector(minsize, sizeof(int), F11_piv, 1, h_F11_piv, 1); 
-      std::memcpy(F11_.data(),h_F11_, F11_.rows()*F11_.cols()*sizeof(scalar_t));
-      //memcpy1 = cudaMemcpy(F11_.data(),h_F11_, F11_.rows()*F11_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-      //assert(memcpy1 == cudaSuccess);
+        cublasGetVector(minsize, sizeof(int), F11_piv, 1, h_F11_piv, 1); 
+        memcpy1 = cudaMemcpy(F11_.data(),h_F11_, F11_.rows()*F11_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+        assert(memcpy1 == cudaSuccess);
 
-      piv.resize(minsize);
-      std::memcpy(piv.data(), h_F11_piv, minsize*sizeof(int));
-      //cudaMemcpy(piv.data(), h_F11_piv, minsize*sizeof(int), cudaMemcpyHostToHost);
+        piv.resize(minsize);
+        cudaMemcpy(piv.data(), h_F11_piv, minsize*sizeof(int), cudaMemcpyHostToHost);
 
-      // std::iota(piv.begin(), piv.end(), 1);
-      
+ //       if (opts.replace_tiny_pivots()) {
+ //         // TODO consider other values for thresh
+ //         //  - sqrt(eps)*|A|_1 as in SuperLU ?
+ //         auto thresh = blas::lamch<real_t>('E') * A.size();
+ //         for (std::size_t i=0; i<F11_.rows(); i++)
+ //           if (std::abs(F11_(i,i)) < thresh)
+ //             F11_(i,i) = (std::real(F11_(i,i)) < 0) ? -thresh : thresh;
+ //       }
+        if (dim_upd()) {
+          cudaError_t eventerr2 = cudaStreamWaitEvent(schur_stream, LU_event, 0); 
+          assert(eventerr2 == cudaSuccess);
 
- //     if (opts.replace_tiny_pivots()) {
- //       // TODO consider other values for thresh
- //       //  - sqrt(eps)*|A|_1 as in SuperLU ?
- //       auto thresh = blas::lamch<real_t>('E') * A.size();
- //       for (std::size_t i=0; i<F11_.rows(); i++)
- //         if (std::abs(F11_(i,i)) < thresh)
- //           F11_(i,i) = (std::real(F11_(i,i)) < 0) ? -thresh : thresh;
- //     }
-      if (dim_upd()) {
-        //cudaError_t eventerr2 = cudaStreamWaitEvent(schur_stream, LU_event, 0); 
-        //assert(eventerr2 == cudaSuccess);
+          cudaStreamSynchronize(schur_stream);
+          cudaStreamSynchronize(F11_stream);
+          cusolverStatus_t getrs_err = cusolverDnDgetrs(F11_handle, CUBLAS_OP_N, F11_.rows(), F12_.cols(), d_F11_, F11_.ld(), F11_piv, d_F12_, F12_.ld(), F11_err); 
+          assert(getrs_err == CUSOLVER_STATUS_SUCCESS);
+          double alpha = -1.;
+          double beta = 1.;
 
-        //cudaStreamSynchronize(schur_stream);
-        //cudaStreamSynchronize(F11_stream);
-        cusolverStatus_t getrs_err = cusolverDnDgetrs(F11_handle, CUBLAS_OP_N, F11_.rows(), F12_.cols(), d_F11_, F11_.ld(), F11_piv, d_F12_, F12_.ld(), F11_err); 
-        assert(getrs_err == CUSOLVER_STATUS_SUCCESS);
-        double alpha = -1.;
-        double beta = 1.;
-        //cudaStreamSynchronize(schur_stream);
-        //cudaStreamSynchronize(F11_stream);
-        
-        stat = cublasDgemm(schur_handle, CUBLAS_OP_N, CUBLAS_OP_N, 
-                           F22_.rows(), F22_.cols(), F12_.rows(), 
-                           &alpha, d_F21_, F21_.ld(), 
-                           d_F12_, F12_.ld(), &beta, 
-                           d_F22_, F22_.ld());
+          stat = cublasDgemm(schur_handle, CUBLAS_OP_N, CUBLAS_OP_N, 
+                             F22_.rows(), F22_.cols(), F12_.rows(), 
+                             &alpha, d_F21_, F21_.ld(), 
+                             d_F12_, F12_.ld(), &beta, 
+                             d_F22_, F22_.ld());
 
-        //cudaStreamSynchronize(schur_stream);
-        //cudaStreamSynchronize(F11_stream);
-
-	// TODO async? in separate streams?
-        stat2 = cublasGetMatrix(F12_.rows(), F12_.cols(), sizeof(scalar_t), d_F12_, F12_.ld(), h_F12_, F12_.ld());
-        stat3 = cublasGetMatrix(F21_.rows(), F21_.cols(), sizeof(scalar_t), d_F21_, F21_.ld(), h_F21_, F21_.ld());
-        stat4 = cublasGetMatrix(F22_.rows(), F22_.cols(), sizeof(scalar_t), d_F22_, F22_.ld(), h_F22_, F22_.ld());
+	  // TODO async? in separate streams?
+          stat2 = cublasGetMatrix(F12_.rows(), F12_.cols(), sizeof(scalar_t), d_F12_, F12_.ld(), h_F12_, F12_.ld());
+          stat3 = cublasGetMatrix(F21_.rows(), F21_.cols(), sizeof(scalar_t), d_F21_, F21_.ld(), h_F21_, F21_.ld());
+          stat4 = cublasGetMatrix(F22_.rows(), F22_.cols(), sizeof(scalar_t), d_F22_, F22_.ld(), h_F22_, F22_.ld());
 
 
 
-        assert(stat2 == CUBLAS_STATUS_SUCCESS);
-        assert(stat3 == CUBLAS_STATUS_SUCCESS);
-        assert(stat4 == CUBLAS_STATUS_SUCCESS);
+          assert(stat2 == CUBLAS_STATUS_SUCCESS);
+          assert(stat3 == CUBLAS_STATUS_SUCCESS);
+          assert(stat4 == CUBLAS_STATUS_SUCCESS);
 
 
-        //memcpy2 = cudaMemcpy(F12_.data(),h_F12_, F12_.rows()*F12_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-        //memcpy3 = cudaMemcpy(F21_.data(),h_F21_, F21_.rows()*F21_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
-        //memcpy4 = cudaMemcpy(F22_.data(),h_F22_, F22_.rows()*F22_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+          memcpy2 = cudaMemcpy(F12_.data(),h_F12_, F12_.rows()*F12_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+          memcpy3 = cudaMemcpy(F21_.data(),h_F21_, F21_.rows()*F21_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
+          memcpy4 = cudaMemcpy(F22_.data(),h_F22_, F22_.rows()*F22_.cols()*sizeof(scalar_t), cudaMemcpyHostToHost);
 
-        memcpy(F12_.data(),h_F12_, F12_.rows()*F12_.cols()*sizeof(scalar_t));
-        memcpy(F21_.data(),h_F21_, F21_.rows()*F21_.cols()*sizeof(scalar_t));
-        memcpy(F22_.data(),h_F22_, F22_.rows()*F22_.cols()*sizeof(scalar_t));
+          assert(memcpy2 == cudaSuccess);
+          assert(memcpy3 == cudaSuccess);
+          assert(memcpy4 == cudaSuccess);
 
-        //assert(memcpy2 == cudaSuccess);
-        //assert(memcpy3 == cudaSuccess);
-        //assert(memcpy4 == cudaSuccess);
-
-      }
+        }
     }
-    std::cout << "F11 NORM IS = " << F11_.norm() << std::endl;
     STRUMPACK_FULL_RANK_FLOPS
       (LU_flops(F11_) +
        gemm_flops(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_, scalar_t(1.)) +
        trsm_flops(Side::L, scalar_t(1.), F11_, F12_) +
        trsm_flops(Side::R, scalar_t(1.), F11_, F21_));
 
-      //cudaEventDestroy(LU_event);
-      //stream_result = cudaStreamDestroy(F11_stream);
-      //stream_result = cudaStreamDestroy(schur_stream);
+      cudaEventDestroy(LU_event);
+      stream_result = cudaStreamDestroy(F11_stream);
+      stream_result = cudaStreamDestroy(schur_stream);
   }
 #endif
   template<typename scalar_t,typename integer_t> void
@@ -516,7 +476,7 @@ namespace strumpack {
       }
     }
     
-    std::cout << "F11 NORM IS = " << F11_.norm() << std::endl;
+    //std::cout << "F11 NORM IS = " << F11_.norm() << std::endl;
     STRUMPACK_FULL_RANK_FLOPS
       (LU_flops(F11_) +
        gemm_flops(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_, scalar_t(1.)) +
