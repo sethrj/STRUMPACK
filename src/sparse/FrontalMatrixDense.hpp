@@ -144,7 +144,9 @@ namespace strumpack {
 #endif
 
   private:
-    DenseM_t F11_, F12_, F21_, F22_;
+    std::unique_ptr<scalar_t[], std::function<void(scalar_t*)>> factor_mem_;
+    std::unique_ptr<scalar_t[], std::function<void(scalar_t*)>> schur_mem_;
+    DenseMW_t F11_, F12_, F21_, F22_;
     std::vector<int> piv; // regular int because it is passed to BLAS
     std::vector<int> cuda_piv; // regular int because it is passed to BLAS
 
@@ -160,7 +162,7 @@ namespace strumpack {
     void cuda_factor_phase2
     (const SpMat_t& A, const SPOptions<scalar_t>& opts,
      int etree_level, int task_depth);
-    
+
     void fwd_solve_phase2
     (DenseM_t& b, DenseM_t& bupd, int etree_level, int task_depth) const;
     void bwd_solve_phase1
@@ -268,14 +270,23 @@ namespace strumpack {
     // TODO can we allocate the memory in one go??
     const auto dsep = dim_sep();
     const auto dupd = dim_upd();
-    F11_ = DenseM_t(dsep, dsep); F11_.zero();
-    F12_ = DenseM_t(dsep, dupd); F12_.zero();
-    F21_ = DenseM_t(dupd, dsep); F21_.zero();
+    factor_mem_ = std::unique_ptr<scalar_t[], std::function<void(scalar_t*)>>
+      (new scalar_t[dsep*(dsep+2*dupd)], [](scalar_t* ptr) { delete[] ptr; });
+    // F11_ = DenseM_t(dsep, dsep); F11_.zero();
+    // F12_ = DenseM_t(dsep, dupd); F12_.zero();
+    // F21_ = DenseM_t(dupd, dsep); F21_.zero();
+    auto fm = factor_mem_.get();
+    F11_ = DenseMW_t(dsep, dsep, fm, dsep); fm = F11_.end(); F11_.zero();
+    F12_ = DenseMW_t(dsep, dupd, fm, dsep); fm = F12_.end(); F12_.zero();
+    F21_ = DenseMW_t(dupd, dsep, fm, dupd); fm = F21_.end(); F21_.zero();
     A.extract_front
       (F11_, F12_, F21_, this->sep_begin_, this->sep_end_,
        this->upd_, task_depth);
     if (dupd) {
-      F22_ = DenseM_t(dupd, dupd);
+      schur_mem_ = std::unique_ptr<scalar_t[], std::function<void(scalar_t*)>>
+        (new scalar_t[dupd*dupd], [](scalar_t* ptr) { delete[] ptr; });
+      //F22_ = DenseM_t(dupd, dupd);
+      F22_ = DenseMW_t(dupd, dupd, schur_mem_.get(), dupd);
       F22_.zero();
     }
     if (lchild_)
@@ -500,11 +511,12 @@ namespace strumpack {
             F11_(i,i) = (std::real(F11_(i,i)) < 0) ? -thresh : thresh;
       }
       if (dim_upd()) {
-        F12_.laswp(piv, true);
-        trsm(Side::L, UpLo::L, Trans::N, Diag::U,
-             scalar_t(1.), F11_, F12_, task_depth);
-        trsm(Side::R, UpLo::U, Trans::N, Diag::N,
-             scalar_t(1.), F11_, F21_, task_depth);
+        F11_.solve_LU_in_place(F12_, piv, 0);
+        // F12_.laswp(piv, true);
+        // trsm(Side::L, UpLo::L, Trans::N, Diag::U,
+        //      scalar_t(1.), F11_, F12_, task_depth);
+        // trsm(Side::R, UpLo::U, Trans::N, Diag::N,
+        //      scalar_t(1.), F11_, F21_, task_depth);
         gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, F12_,
              scalar_t(1.), F22_, task_depth);
       }
@@ -539,84 +551,11 @@ namespace strumpack {
   FrontalMatrixDense<scalar_t,integer_t>::fwd_solve_phase2
   (DenseM_t& b, DenseM_t& bupd, int etree_level, int task_depth) const {
     if (dim_sep()) {
-
-#if defined(STRUMPACK_USE_CUDA)
-
       DenseMW_t bloc(dim_sep(), b.cols(), b, this->sep_begin_, 0);
-      if (dim_sep()+dim_upd() > 100) {
-       // cusolverDnHandle_t handle;
-       // int *info, *d_F11_piv, size;
-       // double *d_F11_, *d_b;
-
-       // size = b.rows()+b.cols()+
-       //        F11_.rows()+F11_.cols();
-
-       // cusolverDnCreate(&handle);
-
-       // static std::size_t total_size_buff_dev_bytes = 0;
-       // static double *buff_dev = nullptr;
-       // std::size_t new_total_size_buff_dev_bytes = size*sizeof(scalar_t) + F11_.rows()*sizeof(int) + sizeof(int);
-
-       // if (new_total_size_buff_dev_bytes > total_size_buff_dev_bytes) {
-       //     total_size_buff_dev_bytes = new_total_size_buff_dev_bytes;
-       //     if(buff_dev) cudaFree(buff_dev);
-       //     cudaError_t buff_dev_err = cudaMalloc((void **)&buff_dev, new_total_size_buff_dev_bytes);
-       //     if (buff_dev_err != cudaSuccess)
-       //         std::cout << "cudaMalloc Device in forward solve error code: " << buff_dev_err << std::endl;
-       //     assert(buff_dev_err == cudaSuccess);
-       // }
-
-       // d_F11_ = buff_dev;
-       // d_b = d_F11_ + F11_.rows()*F11_.cols();
-       // d_F11_piv = (int *)(d_b + b.rows()*b.cols());
-       // info = d_F11_piv + sizeof(int);
-       // 
-       // cublasSetMatrix(F11_.rows(), F11_.cols(), sizeof(scalar_t), F11_.data(), F11_.ld(), d_F11_, F11_.ld());
-       // cublasSetMatrix(b.rows(), b.cols(), sizeof(scalar_t), b.data(), b.ld(), d_b, b.ld());
-       // cublasSetVector(piv.size(), sizeof(int), piv.data(), 1, d_F11_piv, 1);
-       // cusolverDnDgetrs(handle, CUBLAS_OP_N, F11_.rows(), b.cols(), d_F11_, F11_.ld(), d_F11_piv, d_b, b.ld(), info);
-
-       // cublasGetMatrix(F11_.rows(), F11_.cols(), sizeof(scalar_t), d_F11_, F11_.ld(), const_cast<double *>(F11_.data()), F11_.ld());
-       // cublasGetMatrix(b.rows(), b.cols(), sizeof(scalar_t), d_b, b.ld(), b.data(), b.ld());
-       // cublasGetVector(piv.size(), sizeof(int), d_F11_piv, 1, const_cast<int *>(piv.data()), 1);
-       // 
-       // cusolverDnDestroy(handle);
-        F11_.solve_LU_in_place(bloc, piv, task_depth);
-        if (dim_upd()) {  
-          gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, bloc,
-               scalar_t(1.), bupd, task_depth);
-        }
-      } else {
-        bloc.laswp(piv, true);
-        if (b.cols() == 1) {
-          trsv(UpLo::L, Trans::N, Diag::U, F11_, bloc, task_depth);
-          if (dim_upd())
-            gemv(Trans::N, scalar_t(-1.), F21_, bloc,
-                 scalar_t(1.), bupd, task_depth);
-        } else {
-          trsm(Side::L, UpLo::L, Trans::N, Diag::U,
-               scalar_t(1.), F11_, bloc, task_depth);
-          if (dim_upd())
-            gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, bloc,
-                 scalar_t(1.), bupd, task_depth);
-        }
-      }
-#else
-      DenseMW_t bloc(dim_sep(), b.cols(), b, this->sep_begin_, 0);
-      bloc.laswp(piv, true);
-      if (b.cols() == 1) {
-        trsv(UpLo::L, Trans::N, Diag::U, F11_, bloc, task_depth);
-        if (dim_upd())
-          gemv(Trans::N, scalar_t(-1.), F21_, bloc,
-               scalar_t(1.), bupd, task_depth);
-      } else {
-        trsm(Side::L, UpLo::L, Trans::N, Diag::U,
-             scalar_t(1.), F11_, bloc, task_depth);
-        if (dim_upd())
-          gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, bloc,
-               scalar_t(1.), bupd, task_depth);
-      }
-#endif
+      F11_.solve_LU_in_place(bloc, piv, task_depth);
+      if (dim_upd())
+        gemm(Trans::N, Trans::N, scalar_t(-1.), F21_, bloc,
+             scalar_t(1.), bupd, task_depth);
     }
   }
 
@@ -643,40 +582,8 @@ namespace strumpack {
   (DenseM_t& y, DenseM_t& yupd, int etree_level, int task_depth) const {
     if (dim_sep()) {
       DenseMW_t yloc(dim_sep(), y.cols(), y, this->sep_begin_, 0);
-#if defined(STRUMPACK_USE_CUDA)
-      if (dim_sep()+dim_upd() > 100) {      
-	gemm(Trans::N, Trans::N, scalar_t(-1.), F12_, yupd,
-	     scalar_t(1.), yloc, task_depth);
-      } else {
-
-        if (y.cols() == 1) {
-          if (dim_upd())
-            gemv(Trans::N, scalar_t(-1.), F12_, yupd,
-                 scalar_t(1.), yloc, task_depth);
-          trsv(UpLo::U, Trans::N, Diag::N, F11_, yloc, task_depth);
-        } else {
-          if (dim_upd())
-            gemm(Trans::N, Trans::N, scalar_t(-1.), F12_, yupd,
-                 scalar_t(1.), yloc, task_depth);
-          trsm(Side::L, UpLo::U, Trans::N, Diag::N, scalar_t(1.),
-               F11_, yloc, task_depth);
-        }
-
-      }
-#else
-      if (y.cols() == 1) {
-        if (dim_upd())
-          gemv(Trans::N, scalar_t(-1.), F12_, yupd,
-               scalar_t(1.), yloc, task_depth);
-        trsv(UpLo::U, Trans::N, Diag::N, F11_, yloc, task_depth);
-      } else {
-        if (dim_upd())
-          gemm(Trans::N, Trans::N, scalar_t(-1.), F12_, yupd,
-               scalar_t(1.), yloc, task_depth);
-        trsm(Side::L, UpLo::U, Trans::N, Diag::N, scalar_t(1.),
-             F11_, yloc, task_depth);
-      }
-#endif
+      gemm(Trans::N, Trans::N, scalar_t(-1.), F12_, yupd,
+           scalar_t(1.), yloc, task_depth);
     }
   }
 
@@ -748,7 +655,7 @@ namespace strumpack {
       for (std::size_t r=0; r<u2s; r++)
         cR(r,c) = R(Ir[r],c);
     DenseM_t cS(u2s, Rcols);
-    DenseMW_t CB11(u2s, u2s, const_cast<DenseM_t&>(F22_), 0, 0);
+    DenseMW_t CB11(u2s, u2s, const_cast<DenseMW_t&>(F22_), 0, 0);
     gemm(op, Trans::N, scalar_t(1.), CB11, cR, scalar_t(0.), cS, task_depth);
     for (std::size_t c=0; c<Rcols; c++)
       for (std::size_t r=0; r<u2s; r++)
@@ -765,7 +672,7 @@ namespace strumpack {
     auto Ir = this->upd_to_parent(pa, u2s);
     auto pds = pa->dim_sep();
     auto Rcols = R.cols();
-    DenseMW_t CB12(u2s, dupd-u2s, const_cast<DenseM_t&>(F22_), 0, u2s);
+    DenseMW_t CB12(u2s, dupd-u2s, const_cast<DenseMW_t&>(F22_), 0, u2s);
     if (op == Trans::N) {
       DenseM_t cR(dupd-u2s, Rcols);
       for (std::size_t c=0; c<Rcols; c++)
@@ -800,7 +707,7 @@ namespace strumpack {
     auto Ir = this->upd_to_parent(pa, u2s);
     auto Rcols = R.cols();
     auto pds = pa->dim_sep();
-    DenseMW_t CB21(dupd-u2s, u2s, const_cast<DenseM_t&>(F22_), u2s, 0);
+    DenseMW_t CB21(dupd-u2s, u2s, const_cast<DenseMW_t&>(F22_), u2s, 0);
     if (op == Trans::N) {
       DenseM_t cR(u2s, Rcols);
       for (std::size_t c=0; c<Rcols; c++)
@@ -840,7 +747,7 @@ namespace strumpack {
       for (std::size_t r=u2s; r<dupd; r++)
         cR(r-u2s,c) = R(Ir[r]-pds,c);
     DenseM_t cS(dupd-u2s, Rcols);
-    DenseMW_t CB22(dupd-u2s, dupd-u2s, const_cast<DenseM_t&>(F22_), u2s, u2s);
+    DenseMW_t CB22(dupd-u2s, dupd-u2s, const_cast<DenseMW_t&>(F22_), u2s, u2s);
     gemm(op, Trans::N, scalar_t(1.), CB22, cR, scalar_t(0.), cS, task_depth);
     for (std::size_t c=0; c<Rcols; c++)
       for (std::size_t r=u2s; r<dupd; r++)
@@ -863,9 +770,23 @@ namespace strumpack {
     } else if (etree_level == l) ldata.f.push_back(this);
   }
 
+#if defined(STRUMPACK_USE_CUDA)
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
   (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
+
+    auto cuda_deleter = [](scalar_t* ptr) { cudaFree(ptr); };
+
+    const int max_streams = 64;
+    std::vector<cudaStream_t> streams(max_streams);
+    std::vector<cublasHandle_t> blas_handle(max_streams);
+    std::vector<cusolverDnHandle_t> solver_handle(max_streams);
+    for (int i=0; i<max_streams; i++) {
+      cudaStreamCreate(&streams[i]);
+      cublasCreate(&blas_handle[i]);
+      cusolverDnCreate(&solver_handle[i]);
+    }
+
     int lvls = this->levels();
     for (int lvl=0; lvl<lvls; lvl++) {
       int l = lvls - lvl - 1;
@@ -873,38 +794,173 @@ namespace strumpack {
       setup_level(A, opts, ldata, l);
       auto nnodes = ldata.f.size();
 
-      std::size_t factor_mem = 0, schur_mem = 0;
+      // TODO figure out maximum number of streams based on available
+      // memory on GPU?
+      int n_streams = std::max(max_streams, nnodes);
+
+      std::size_t factor_mem_size = 0, schur_mem_size = 0, work_space = 0,
+        node_max_dsep = 0;
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
         const auto dupd = f.dim_upd();
-        factor_mem += dsep*dsep + 2*dsep*dupd;
-        schur_mem += dupd*dupd;
+        factor_mem_size += dsep*dsep + 2*dsep*dupd;
+        schur_mem_size += dupd*dupd;
+        if (dsep > max_dsep) node_max_dsep = n;
+      }
+      // TODO get workspace size using cusolverDnDgetrf_bufferSize
+
+      if (opts.verbose())
+        std::cout << "#      level " << l << " of " << lvls
+                  << " has " << ldata.f.size() << " nodes, needs "
+                  << factor_mem_size * sizeof(scalar_t) / 1.e6
+                  << " MB for factors, "
+                  << schur_mem_size * sizeof(scalar_t) / 1.e6
+                  << " MB for Schur complements"
+                  << std::endl;
+      scalar_t* fmem = nullptr;
+      scalar_t* smem = nullptr;
+      cudaMallocManaged(&fmem, factor_mem_size*sizeof(scalar_t));
+      cudaMallocManaged(&smem, schur_mem_size*sizeof(scalar_t));
+      ldata.f[0]->factor_mem_ =
+        std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>
+        (fm, cuda_deleter);
+      ldata.f[0]->schur_mem_ =
+        std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>
+        (sm, cuda_deleter);
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep); fmem = f.F11_.end();
+        f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep); fmem = f.F12_.end();
+        f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem = f.F21_.end();
+        if (dupd) {
+          f.F22_ = DenseMW_t(dupd, dupd, smem, dupd);
+          smem = f.F22_.end();
+        }
+      }
+      int getrf_work_size = 0;
+      {
+        auto& f = *(ldata.f[node_max_dsep]);
+        cusolverDnDgetrf_bufferSize
+          (solver_handle, f.F11_.rows(), f.F11_.cols(), f.F11_.data(), f.F11_.ld(), &getrf_worksize);
+      }
+      // TODO allocate getrf_worksize
+      scalar_t* wmem = nullptr;
+      cudaMallocManaged(&wmem, getrf_work_size*sizeof(scalar_t)*n_streams);
+      std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>> getrf_work
+        (wmem, cuda_deleter);
+
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        f.F11_.zero();
+        f.F12_.zero();
+        f.F21_.zero();
+        f.F22_.zero();
+        A.extract_front
+          (f.F11_, f.F12_, f.F21_, f.sep_begin_, f.sep_end_, f.upd_, 0);
+        if (f.lchild_)
+          f.lchild_->extend_add_to_dense
+            (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
+        if (f.rchild_)
+          f.rchild_->extend_add_to_dense
+            (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
+        if (dsep) {
+
+          // TODO cuSolverDnGetrf on stream[n % n_streams]
+          // use wmem + (n % n_streams) * getrf_work_size as workmemory
+          //f.piv = f.F11_.LU(0);
+
+
+          // TODO if (opts.replace_tiny_pivots()) { ...
+          if (dupd) {
+            // TODO cuSolverDnGetrs on stream[n % n_streams]
+
+            // TODO use cublas_gemm ..
+            gemm(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_,
+                 scalar_t(1.), f.F22_, 0);
+          }
+        }
+        STRUMPACK_FULL_RANK_FLOPS
+          (LU_flops(f.F11_) +
+           gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
+           trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
+           trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
+      }
+    }
+
+    for (int i=0; i<max_streams; i++) {
+      cudaStreamDestroy(streams[i]);
+      cublasDestroy(blas_handle[i]);
+      cusolverDnDestroy(solver_handle[i]);
+    }
+  }
+#else
+  template<typename scalar_t,typename integer_t> void
+  FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
+  (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
+    auto def_deleter = [](scalar_t* ptr) { delete[] ptr; };
+
+    int lvls = this->levels();
+    for (int lvl=0; lvl<lvls; lvl++) {
+      int l = lvls - lvl - 1;
+      LevelInfo_t ldata;
+      setup_level(A, opts, ldata, l);
+      auto nnodes = ldata.f.size();
+
+      std::size_t factor_mem_size = 0, schur_mem_size = 0;
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        factor_mem_size += dsep*dsep + 2*dsep*dupd;
+        schur_mem_size += dupd*dupd;
       }
       if (opts.verbose())
         std::cout << "#      level " << l << " of " << lvls
                   << " has " << ldata.f.size() << " nodes, needs "
-                  << factor_mem * sizeof(scalar_t) / 1.e6
+                  << factor_mem_size * sizeof(scalar_t) / 1.e6
                   << " MB for factors, "
-                  << schur_mem * sizeof(scalar_t) / 1.e6
+                  << schur_mem_size * sizeof(scalar_t) / 1.e6
                   << " MB for Schur complements"
                   << std::endl;
 
-      // TODO do this with a batched call
+      ldata.f[0]->factor_mem_ =
+        std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>
+        (new scalar_t[factor_mem_size], def_deleter);
+      ldata.f[0]->schur_mem_ =
+        std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>
+        (new scalar_t[schur_mem_size], def_deleter);
+      auto fmem = ldata.f[0]->factor_mem_.get();
+      auto smem = ldata.f[0]->schur_mem_.get();
+
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep); fmem = f.F11_.end();
+        f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep); fmem = f.F12_.end();
+        f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem = f.F21_.end();
+        if (dupd) {
+          f.F22_ = DenseMW_t(dupd, dupd, smem, dupd);
+          smem = f.F22_.end();
+        }
+      }
+
 #pragma omp parallel for if(l!=0)
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
         const auto dupd = f.dim_upd();
-        f.F11_ = DenseM_t(dsep, dsep); f.F11_.zero();
-        f.F12_ = DenseM_t(dsep, dupd); f.F12_.zero();
-        f.F21_ = DenseM_t(dupd, dsep); f.F21_.zero();
+        f.F11_.zero();
+        f.F12_.zero();
+        f.F21_.zero();
+        f.F22_.zero();
         A.extract_front
           (f.F11_, f.F12_, f.F21_, f.sep_begin_, f.sep_end_, f.upd_, 0);
-        if (dupd) {
-          f.F22_ = DenseM_t(dupd, dupd);
-          f.F22_.zero();
-        }
         if (f.lchild_)
           f.lchild_->extend_add_to_dense
             (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
@@ -915,11 +971,7 @@ namespace strumpack {
           f.piv = f.F11_.LU(0);
           // TODO if (opts.replace_tiny_pivots()) { ...
           if (dupd) {
-            f.F12_.laswp(f.piv, true);
-            trsm(Side::L, UpLo::L, Trans::N, Diag::U,
-                 scalar_t(1.), f.F11_, f.F12_, 0);
-            trsm(Side::R, UpLo::U, Trans::N, Diag::N,
-                 scalar_t(1.), f.F11_, f.F21_, 0);
+            f.F11_.solve_LU_in_place(f.F12_, f.piv, 0);
             gemm(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_,
                  scalar_t(1.), f.F22_, 0);
           }
@@ -932,7 +984,7 @@ namespace strumpack {
       }
     }
   }
-
+#endif
 
 } // end namespace strumpack
 
