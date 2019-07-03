@@ -148,7 +148,6 @@ namespace strumpack {
     std::unique_ptr<scalar_t[], std::function<void(scalar_t*)>> schur_mem_;
     DenseMW_t F11_, F12_, F21_, F22_;
     std::vector<int> piv; // regular int because it is passed to BLAS
-    std::vector<int> cuda_piv; // regular int because it is passed to BLAS
 
     FrontalMatrixDense(const FrontalMatrixDense&) = delete;
     FrontalMatrixDense& operator=(FrontalMatrixDense const&) = delete;
@@ -775,7 +774,9 @@ namespace strumpack {
   FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
   (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
 
-    auto cuda_deleter = [](scalar_t* ptr) { cudaFree(ptr); };
+    using uniq_scalar_t = std::unique_ptr<scalar_t[],std::function<void(void*)>>;
+    using uniq_int_t = std::unique_ptr<int[],std::function<void(void*)>>;
+    auto cuda_deleter = [](void* ptr) { cudaFree(ptr); };
 
     const int max_streams = 64;
     std::vector<cudaStream_t> streams(max_streams);
@@ -785,6 +786,7 @@ namespace strumpack {
       cudaStreamCreate(&streams[i]);
       cublasCreate(&blas_handle[i]);
       cusolverDnCreate(&solver_handle[i]);
+      cusolverDnSetStream(solver_handle[i], stream[i]);
     }
 
     int lvls = this->levels();
@@ -822,12 +824,8 @@ namespace strumpack {
       scalar_t* smem = nullptr;
       cudaMallocManaged(&fmem, factor_mem_size*sizeof(scalar_t));
       cudaMallocManaged(&smem, schur_mem_size*sizeof(scalar_t));
-      ldata.f[0]->factor_mem_ =
-        std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>
-        (fm, cuda_deleter);
-      ldata.f[0]->schur_mem_ =
-        std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>
-        (sm, cuda_deleter);
+      ldata.f[0]->factor_mem_ = uniq_scalar_t(fm, cuda_deleter);
+      ldata.f[0]->schur_mem_ = uniq_scalar_t(sm, cuda_deleter);
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
@@ -840,19 +838,24 @@ namespace strumpack {
           smem = f.F22_.end();
         }
       }
-      int getrf_work_size = 0;
+      int getrf_work_size = 0, piv_work_size = 0;
       {
         auto& f = *(ldata.f[node_max_dsep]);
         cusolverDnDgetrf_bufferSize
-          (solver_handle, f.F11_.rows(), f.F11_.cols(), f.F11_.data(), f.F11_.ld(), &getrf_worksize);
+          (solver_handle, f.F11_.rows(), f.F11_.cols(),
+           f.F11_.data(), f.F11_.ld(), &getrf_work_size);
+        piv_work_size = f.dim_sep();
       }
       // TODO allocate getrf_worksize
       scalar_t* wmem = nullptr;
+      int* pmem = nullptr;
       cudaMallocManaged(&wmem, getrf_work_size*sizeof(scalar_t)*n_streams);
-      std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>> getrf_work
-        (wmem, cuda_deleter);
+      cudaMallocManaged(&pmem, piv_work_size*sizeof(int)*n_streams);
+      uniq_scalar_t getrf_work(wmem, cuda_deleter);
+      uniq_int_t piv_work(pmem, cuda_deleter);
 
       for (std::size_t n=0; n<nnodes; n++) {
+        auto stream = n % n_streams;
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
         const auto dupd = f.dim_upd();
@@ -870,10 +873,15 @@ namespace strumpack {
             (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
         if (dsep) {
 
-          // TODO cuSolverDnGetrf on stream[n % n_streams]
-          // use wmem + (n % n_streams) * getrf_work_size as workmemory
-          //f.piv = f.F11_.LU(0);
+          // TODO declate getrf_err
 
+          // auto LU_stat = cusolverDnDgetrf
+          //   (solver_handle[stream], dsep, dsep, f.F11_.data(), dsep,
+          //    wmem + stream * getrf_work_size, pmem + stream * piv_work_size,
+          //    getrf_err);
+
+          f.piv.resize(dsep);
+          std::copy(pmem, pmem+dsep, f.piv.data());
 
           // TODO if (opts.replace_tiny_pivots()) { ...
           if (dupd) {
