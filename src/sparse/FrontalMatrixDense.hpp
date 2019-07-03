@@ -788,6 +788,9 @@ namespace strumpack {
       cusolverDnCreate(&solver_handle[i]);
       cusolverDnSetStream(solver_handle[i], stream[i]);
     }
+    int* getrf_err = nullptr;
+    cudaMallocManaged(&getrf_err, sizeof(int)*max_streams);
+    uniq_int_t getrf_err_mem(getrf_err, cuda_deleter);
 
     int lvls = this->levels();
     for (int lvl=0; lvl<lvls; lvl++) {
@@ -873,12 +876,10 @@ namespace strumpack {
             (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
         if (dsep) {
 
-          // TODO declate getrf_err
-
-          // auto LU_stat = cusolverDnDgetrf
-          //   (solver_handle[stream], dsep, dsep, f.F11_.data(), dsep,
-          //    wmem + stream * getrf_work_size, pmem + stream * piv_work_size,
-          //    getrf_err);
+          auto LU_stat = cusolverDnDgetrf
+            (solver_handle[stream], dsep, dsep, f.F11_.data(), dsep,
+             wmem + stream * getrf_work_size, pmem + stream * piv_work_size,
+             &getrf_err[stream]);
 
           f.piv.resize(dsep);
           std::copy(pmem, pmem+dsep, f.piv.data());
@@ -887,9 +888,11 @@ namespace strumpack {
           if (dupd) {
             // TODO cuSolverDnGetrs on stream[n % n_streams]
 
-            // TODO use cublas_gemm ..
-            gemm(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_,
-                 scalar_t(1.), f.F22_, 0);
+            scalar_t alpha(-1.), beta(1.);
+            auto stat = cublasDgemm
+              (blas_handle[stream], CUBLAS_OP_N, CUBLAS_OP_N,
+               dupd, dups, dsep, &alpha, f.F21_.data(), dupd,
+               f.F12_.data(), dsep, &beta, f.F22_.data(), dupd);
           }
         }
         STRUMPACK_FULL_RANK_FLOPS
@@ -898,6 +901,9 @@ namespace strumpack {
            trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
            trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
       }
+
+      // TODO synchronize??
+
     }
 
     for (int i=0; i<max_streams; i++) {
