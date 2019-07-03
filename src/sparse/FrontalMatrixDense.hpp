@@ -50,12 +50,34 @@
 
 namespace strumpack {
 
+  template<typename scalar_t,typename integer_t> class FrontalMatrixDense;
+
+  template<typename scalar_t, typename integer_t> class LevelInfo {
+  public:
+    std::vector<FrontalMatrixDense<scalar_t,integer_t>*> f;
+    // std::vector<std::size_t> dsep, dupd;
+    // std::vector<scalar_t*> pF11, pF12, pF21, pF22;
+    // std::vector<int*> piv;
+    void reserve(std::size_t n) {
+      f.reserve(n);
+      // dsep.reserve(n);
+      // dupd.reserve(n);
+      // pF11.reserve(n);
+      // pF21.reserve(n);
+      // pF21.reserve(n);
+      // pF22.reserve(n);
+      // piv.reserve(n);
+    }
+  };
+
+
   template<typename scalar_t,typename integer_t> class FrontalMatrixDense
     : public FrontalMatrix<scalar_t,integer_t> {
     using F_t = FrontalMatrix<scalar_t,integer_t>;
     using DenseM_t = DenseMatrix<scalar_t>;
     using DenseMW_t = DenseMatrixWrapper<scalar_t>;
     using SpMat_t = CompressedSparseMatrix<scalar_t,integer_t>;
+    using LevelInfo_t = LevelInfo<scalar_t,integer_t>;
 #if defined(STRUMPACK_USE_MPI)
     using ExtAdd = ExtendAdd<scalar_t,integer_t>;
 #endif
@@ -106,6 +128,12 @@ namespace strumpack {
      DenseM_t& B, int task_depth) const override;
 
     std::string type() const override { return "FrontalMatrixDense"; }
+
+    void factorization_by_level
+    (const SpMat_t& A, const SPOptions<scalar_t>& opts);
+    void setup_level
+    (const SpMat_t& A, const SPOptions<scalar_t>& opts,
+     LevelInfo_t& info, int etree_level, int l=0);
 
 #if defined(STRUMPACK_USE_MPI)
     void extend_add_copy_to_buffers
@@ -185,6 +213,12 @@ namespace strumpack {
   FrontalMatrixDense<scalar_t,integer_t>::multifrontal_factorization
   (const SpMat_t& A, const SPOptions<scalar_t>& opts,
    int etree_level, int task_depth) {
+    // TODO put some logic here to decide when to do the level by
+    // level factorization
+    factorization_by_level(A, opts);
+    return;
+
+
 //    if (task_depth == 0) {
 //      // use tasking for children and for extend-add parallelism
 //#pragma omp parallel if(!omp_in_parallel()) default(shared)
@@ -813,6 +847,92 @@ namespace strumpack {
         S(Ir[r]-pds,c) += cS(r-u2s,c);
     STRUMPACK_CB_SAMPLE_FLOPS((dupd-u2s)*Rcols);
   }
+
+  template<typename scalar_t,typename integer_t> void
+  FrontalMatrixDense<scalar_t,integer_t>::setup_level
+  (const SpMat_t& A, const SPOptions<scalar_t>& opts,
+   LevelInfo_t& ldata, int etree_level, int l) {
+    using FD_t = FrontalMatrixDense<scalar_t,integer_t>;
+    if (l < etree_level) {
+      if (lchild_) // child of dense should be dense!
+        dynamic_cast<FD_t*>(lchild_.get())->
+          setup_level(A, opts, ldata, etree_level, l+1);
+      if (rchild_)
+        dynamic_cast<FD_t*>(rchild_.get())->
+          setup_level(A, opts, ldata, etree_level, l+1);
+    } else if (etree_level == l) ldata.f.push_back(this);
+  }
+
+  template<typename scalar_t,typename integer_t> void
+  FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
+  (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
+    int lvls = this->levels();
+    for (int lvl=0; lvl<lvls; lvl++) {
+      int l = lvls - lvl - 1;
+      LevelInfo_t ldata;
+      setup_level(A, opts, ldata, l);
+      auto nnodes = ldata.f.size();
+
+      std::size_t factor_mem = 0, schur_mem = 0;
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        factor_mem += dsep*dsep + 2*dsep*dupd;
+        schur_mem += dupd*dupd;
+      }
+      if (opts.verbose())
+        std::cout << "#      level " << l << " of " << lvls
+                  << " has " << ldata.f.size() << " nodes, needs "
+                  << factor_mem * sizeof(scalar_t) / 1.e6
+                  << " MB for factors, "
+                  << schur_mem * sizeof(scalar_t) / 1.e6
+                  << " MB for Schur complements"
+                  << std::endl;
+
+      // TODO do this with a batched call
+#pragma omp parallel for if(l!=0)
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        f.F11_ = DenseM_t(dsep, dsep); f.F11_.zero();
+        f.F12_ = DenseM_t(dsep, dupd); f.F12_.zero();
+        f.F21_ = DenseM_t(dupd, dsep); f.F21_.zero();
+        A.extract_front
+          (f.F11_, f.F12_, f.F21_, f.sep_begin_, f.sep_end_, f.upd_, 0);
+        if (dupd) {
+          f.F22_ = DenseM_t(dupd, dupd);
+          f.F22_.zero();
+        }
+        if (f.lchild_)
+          f.lchild_->extend_add_to_dense
+            (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
+        if (f.rchild_)
+          f.rchild_->extend_add_to_dense
+            (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
+        if (dsep) {
+          f.piv = f.F11_.LU(0);
+          // TODO if (opts.replace_tiny_pivots()) { ...
+          if (dupd) {
+            f.F12_.laswp(f.piv, true);
+            trsm(Side::L, UpLo::L, Trans::N, Diag::U,
+                 scalar_t(1.), f.F11_, f.F12_, 0);
+            trsm(Side::R, UpLo::U, Trans::N, Diag::N,
+                 scalar_t(1.), f.F11_, f.F21_, 0);
+            gemm(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_,
+                 scalar_t(1.), f.F22_, 0);
+          }
+        }
+        STRUMPACK_FULL_RANK_FLOPS
+          (LU_flops(f.F11_) +
+           gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
+           trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
+           trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
+      }
+    }
+  }
+
 
 } // end namespace strumpack
 
