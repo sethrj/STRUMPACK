@@ -43,9 +43,10 @@
 #include "ExtendAdd.hpp"
 #endif
 #if defined(STRUMPACK_USE_CUDA)
-#include "cublas_v2.h"
-#include "cusolverDn.h"
+#include <cusolverDn.h>
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include "FrontalMatrixDenseCudaWrapper.h"
 #endif
 
 namespace strumpack {
@@ -778,6 +779,7 @@ namespace strumpack {
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
   (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
+    int cutoff_size = 500;
     using uniq_scalar_t = std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>;
     using uniq_int_t = std::unique_ptr<int[],std::function<void(int*)>>;
     auto cuda_deleter = [](void* ptr) { cudaFree(ptr); };
@@ -803,6 +805,19 @@ namespace strumpack {
       LevelInfo_t ldata;
       setup_level(A, opts, ldata, l);
       auto nnodes = ldata.f.size();
+      int nnodes_small = 0;
+
+      std::size_t l_piv_size = 0;
+      for (std::size_t n=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        const auto size = dsep + dupd;
+        if (size < cutoff_size) {
+          nnodes_small++;
+          l_piv_size += dsep;
+        }
+      }
 
       // TODO figure out maximum number of streams based on available
       // memory on GPU?
@@ -824,7 +839,8 @@ namespace strumpack {
 
       if (opts.verbose())
         std::cout << "#      level " << l << " of " << lvls
-                  << " has " << ldata.f.size() << " nodes, needs "
+                  << " has " << ldata.f.size() << " nodes and "
+                  << nnodes_small << " small nodes, needs "
                   << factor_mem_size * sizeof(scalar_t) / 1.e6
                   << " MB for factors, "
                   << schur_mem_size * sizeof(scalar_t) / 1.e6
@@ -851,7 +867,7 @@ namespace strumpack {
       int getrf_work_size = 0, piv_work_size = 0;
       {
         auto& f = *(ldata.f[node_max_dsep]);
-        cusolverDnDgetrf_bufferSize
+        cuda::cusolverDngetrf_bufferSize
           (solver_handle[0], f.F11_.rows(), f.F11_.cols(),
            f.F11_.data(), f.F11_.ld(), &getrf_work_size);
         piv_work_size = f.dim_sep();
@@ -879,28 +895,70 @@ namespace strumpack {
             (f.F11_, f.F12_, f.F21_, f.F22_, &f, 0);
       }
 
-      int cutoff_size = 1000;
+      //allocates memory for array of pointers to small fronts
+      //allocates memory for array of small front sizes
+      scalar_t** l_small;
+      int** l_piv;
+      int* l_piv_mem;
+      cudaMallocManaged(&l_small, nnodes_small*sizeof(scalar_t*)*4);
+      cudaMallocManaged(&l_piv, nnodes_small*sizeof(int*));
+      cudaMallocManaged(&l_piv_mem, l_piv_size*sizeof(int)); 
+      std::size_t* l_size;
+      cudaMallocManaged(&l_size, nnodes_small*sizeof(size_t)*2);
+
+      int idx = 0;
+      for (std::size_t n=0, sum_dsep=0; n<nnodes; n++) {
+        auto& f = *(ldata.f[n]);
+        const auto dsep = f.dim_sep();
+        const auto dupd = f.dim_upd();
+        int size = dsep + dupd;
+        //TODO group F11,F12,F21,F22 contiguously
+        if (size < cutoff_size) {
+          //gets pointers to small fronts
+          l_small[idx] = f.F11_.data();
+          l_small[idx + nnodes_small] = f.F12_.data();
+          l_small[idx + nnodes_small*2] = f.F21_.data(); 
+          l_small[idx + nnodes_small*3] = f.F22_.data();
+
+          //gets sizes of small fronts
+          l_size[idx] = dsep;
+          l_size[idx + nnodes_small] = dupd;
+
+          //gets pivot memry
+          l_piv[idx] = l_piv_mem + sum_dsep;
+          sum_dsep += dsep;
+          idx++;
+        }
+      }
+      //creates arrays of small fronts, their pivot vectors,
+      //and a vector of their sizes.
+      scalar_t** l_small_F11 = l_small;
+      scalar_t** l_small_F12 = l_small + nnodes_small;
+      scalar_t** l_small_F21 = l_small + 2*nnodes_small;
+      scalar_t** l_small_F22 = l_small + 3*nnodes_small;
+      std::size_t* l_n1 = l_size;
+      std::size_t* l_n2 = l_size + nnodes_small;
 
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         auto stream = n % n_streams;
-        const auto dsep = f.dim_sep();
-        const auto dupd = f.dim_upd();
+        const auto dsep = f.dim_sep(); const auto dupd = f.dim_upd();
+        const auto size = dsep + dupd;
 
-        if (dsep + dupd >= cutoff_size) {
+        if (size >= cutoff_size) {
           if (dsep) {
             auto fpiv = pmem + stream * piv_work_size;
-            auto LU_stat = cusolverDnDgetrf
+            auto LU_stat = cuda::cusolverDngetrf
               (solver_handle[stream], dsep, dsep, f.F11_.data(), dsep,
                wmem + stream * getrf_work_size, fpiv,
                &getrf_err[stream]);
-            // TODO if (opts.replace_tiny_pivots()) { ...
+             // TODO if (opts.replace_tiny_pivots()) { ...
             if (dupd) {
-              auto LU_stat = cusolverDnDgetrs
-		(solver_handle[stream], CUBLAS_OP_N, dsep, dupd, 
-		 f.F11_.data(), dsep, fpiv, f.F12_.data(), dsep, &getrf_err[stream]);
+              auto LU_stat = cuda::cusolverDngetrs
+	            (solver_handle[stream], CUBLAS_OP_N, dsep, dupd, 
+	             f.F11_.data(), dsep, fpiv, f.F12_.data(), dsep, &getrf_err[stream]);
               scalar_t alpha(-1.), beta(1.);
-              auto stat = cublasDgemm
+              auto stat = cuda::cublasgemm
                 (blas_handle[stream], CUBLAS_OP_N, CUBLAS_OP_N,
                  dupd, dupd, dsep, &alpha, f.F21_.data(), dupd,
                  f.F12_.data(), dsep, &beta, f.F22_.data(), dupd);
@@ -913,45 +971,37 @@ namespace strumpack {
              trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
         }
       }
-
-      for (std::size_t n=0; n<nnodes; n++) {
-        auto& f = *(ldata.f[n]);
-        const auto dsep = f.dim_sep();
-        const auto dupd = f.dim_upd();
-        if (dsep + dupd < cutoff_size) {
-          if (dsep) {
-            // TODO proper task depth for LU call?
-            f.piv = f.F11_.LU(0);
-            // TODO if (opts.replace_tiny_pivots()) { ...
-            if (dupd) {
-              f.F11_.solve_LU_in_place(f.F12_, f.piv, 0);
-              gemm(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_,
-                   scalar_t(1.), f.F22_, 0);
-            } 
-          }
-          STRUMPACK_FULL_RANK_FLOPS
-            (LU_flops(f.F11_) +
-             gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
-             trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
-             trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
-        }
+      if (nnodes_small) {
+        cuda::partialLUWrapper
+          (nnodes_small, 1, l_n1, l_n2, l_small_F11, 
+           l_small_F12, l_small_F21, l_small_F22, l_piv);
       }
       cudaDeviceSynchronize();
-      // TODO synchronize??
 
+      idx = 0;
       // copy pivot vectors back from the device
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
         const auto dupd = f.dim_upd();
         if (dsep + dupd >= cutoff_size) {
-	  auto stream = n % n_streams;
-	  f.piv.resize(dsep);
-	  auto fpiv = pmem + stream * piv_work_size;
-	  std::copy(fpiv, fpiv+dsep, f.piv.data());
-	}
+	      auto stream = n % n_streams;
+	      f.piv.resize(dsep);
+	      auto fpiv = pmem + stream * piv_work_size;
+	      std::copy(fpiv, fpiv+dsep, f.piv.data());
+	    }
+        else {
+          f.piv.resize(dsep);
+          std::copy(l_piv[idx], l_piv[idx]+dsep, f.piv.data());
+          idx++;
+        }
       }
 
+      std::cout << "Factorization complete" << std::endl;
+      cudaFree(l_piv_mem);
+      cudaFree(l_piv);
+      cudaFree(l_small);
+      cudaFree(l_size);
     }
 
     for (int i=0; i<max_streams; i++) {
