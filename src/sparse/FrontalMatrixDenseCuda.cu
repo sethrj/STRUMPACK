@@ -314,6 +314,11 @@ namespace strumpack {
     __global__ void partialLU
     (size_t* l_n1, size_t* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
 
+      int t_id_x = threadIdx.x;
+      int t_id_y = threadIdx.y;
+      int blkdim_x = blockDim.x;
+      int blkdim_y = blockDim.y;
+
       size_t n1 = l_n1[blockIdx.x];
       size_t n2 = l_n2[blockIdx.x];
       double* A11 = l_A11[blockIdx.x];
@@ -323,54 +328,57 @@ namespace strumpack {
       int* piv = l_piv[blockIdx.x]; 
 
 
-      for (int i=0; i<n1; i++) piv[i] = i+1; // fortran convention
-      for (int j=0; j<n1; j++) {
-        auto Amax = A11[j+j*n1];
-        int imax = j;
-        // find pivot element
-        for (int i=j+1; i<n1; i++) {
-          if (fabs(A11[i+j*n1]) > fabs(Amax)) {
-            Amax = A11[i+j*n1];
-            imax = i;
+      if (t_id_x == 0 && t_id_y == 0) {
+        for (int i=0; i<n1; i++) piv[i] = i+1; // fortran convention
+        for (int j=0; j<n1; j++) {
+          auto Amax = A11[j+j*n1];
+          int imax = j;
+          // find pivot element
+          for (int i=j+1; i<n1; i++) {
+            if (fabs(A11[i+j*n1]) > fabs(Amax)) {
+              Amax = A11[i+j*n1];
+              imax = i;
+            }
           }
+          //if (Amax == 0) return j;
+          if (imax != j) {
+            cuda::swap(piv[j], piv[imax]);
+            for (int i=0; i<n1; i++)
+              cuda::swap(A11[imax+i*n1], A11[j+i*n1]);
+            for (int i=0; i<n2; i++)
+              cuda::swap(A12[imax+i*n1], A12[j+i*n1]);
+          }
+          double one = 1.0;
+          auto iAmax = one / Amax;
+          for (int i=j+1; i<n1; i++)
+            A11[i+j*n1] *= iAmax;
+          for (int i=j+1; i<n1; i++)
+            for (int k=j+1; k<n1; k++)
+              A11[k+i*n1] -= A11[k+j*n1] * A11[j+i*n1];
         }
-        //if (Amax == 0) return j;
-        if (imax != j) {
-          cuda::swap(piv[j], piv[imax]);
-          for (int i=0; i<n1; i++)
-            cuda::swap(A11[imax+i*n1], A11[j+i*n1]);
-          for (int i=0; i<n2; i++)
-            cuda::swap(A12[imax+i*n1], A12[j+i*n1]);
-        }
-        double one = 1.0;
-        auto iAmax = one / Amax;
-        for (int i=j+1; i<n1; i++)
-          A11[i+j*n1] *= iAmax;
-        for (int i=j+1; i<n1; i++)
-          for (int k=j+1; k<n1; k++)
-            A11[k+i*n1] -= A11[k+j*n1] * A11[j+i*n1];
       }
-      //trsm with L
-      for (int i=0; i<n1; i++)
-        for (int k=0; k<n2; k++)
+      __syncthreads();
+      // trsm with L and U
+      for (int k=t_id_x + blkdim_x*t_id_y; k<n2; k+=blkdim_x*blkdim_y) {
+        for (int i=0; i<n1; i++)
           for (int j=0; j<i; j++)
             A12[i+k*n1] -= A11[i+j*n1] * A12[j+k*n1];
-      // trsm with U
-      for (int i=n1-1; i>=0; i--)
-        for (int k=0; k<n2; k++) {
+        for (int i=n1-1; i>=0; i--) {
           for (int j=i+1; j<n1; j++)
             A12[i+k*n1] -= A11[i+j*n1] * A12[j+k*n1];
           A12[i+k*n1] /= A11[i+i*n1];
         }
+      }
+      __syncthreads();
       // gemm
-      for (int j=0; j<n2; j++)
-        for (int i=0; i<n2; i++)
+      for (int j=t_id_x; j<n2; j+=blkdim_x)
+        for (int i=t_id_y; i<n2; i+=blkdim_y)
           for (int k=0; k<n1; k++)
             A22[i+j*n2] -= A21[i+k*n2] * A12[k+j*n1];
     }
 
     void partialLUWrapper
-    (int num_blocks, int threads_per_block, size_t* l_n1, 
+    (int num_blocks, dim3 threads_per_block, size_t* l_n1, 
      size_t* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
        partialLU<<<num_blocks,threads_per_block>>>
          (l_n1, l_n2, l_A11, l_A12, l_A21, l_A22, l_piv);
