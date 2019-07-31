@@ -282,17 +282,17 @@ namespace strumpack {
           (A, opts, etree_level+1, task_depth);
     }
     // TODO can we allocate the memory in one go??
-    const auto dsep = dim_sep();
-    const auto dupd = dim_upd();
+    const std::size_t dsep = dim_sep();
+    const std::size_t dupd = dim_upd();
     factor_mem_ = std::unique_ptr<scalar_t[], std::function<void(scalar_t*)>>
       (new scalar_t[dsep*(dsep+2*dupd)], [](scalar_t* ptr) { delete[] ptr; });
     // F11_ = DenseM_t(dsep, dsep); F11_.zero();
     // F12_ = DenseM_t(dsep, dupd); F12_.zero();
     // F21_ = DenseM_t(dupd, dsep); F21_.zero();
     auto fm = factor_mem_.get();
-    F11_ = DenseMW_t(dsep, dsep, fm, dsep); fm = F11_.end(); F11_.zero();
-    F12_ = DenseMW_t(dsep, dupd, fm, dsep); fm = F12_.end(); F12_.zero();
-    F21_ = DenseMW_t(dupd, dsep, fm, dupd); fm = F21_.end(); F21_.zero();
+    F11_ = DenseMW_t(dsep, dsep, fm, dsep); fm += dsep*dsep; F11_.zero();
+    F12_ = DenseMW_t(dsep, dupd, fm, dsep); fm += dsep*dupd; F12_.zero();
+    F21_ = DenseMW_t(dupd, dsep, fm, dupd); fm += dupd*dsep; F21_.zero();
     A.extract_front
       (F11_, F12_, F21_, this->sep_begin_, this->sep_end_,
        this->upd_, task_depth);
@@ -874,14 +874,14 @@ namespace strumpack {
 
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata[l].f[n]);
-        const auto dsep = f.dim_sep();
-        const auto dupd = f.dim_upd();
-        f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep); fmem = f.F11_.end();
-        f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep); fmem = f.F12_.end();
-        f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem = f.F21_.end();
+        const std::size_t dsep = f.dim_sep();
+        const std::size_t dupd = f.dim_upd();
+        f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep); fmem += dsep*dsep;
+        f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep); fmem += dsep*dupd;
+        f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem += dupd*dsep;
         if (dupd) {
           f.F22_ = DenseMW_t(dupd, dupd, static_cast<scalar_t*>(wmem), dupd);
-          wmem = f.F22_.end();
+          wmem += dupd*dupd;
         }
       }
 
@@ -1070,16 +1070,19 @@ namespace strumpack {
 
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
-        const auto dsep = f.dim_sep();
-        const auto dupd = f.dim_upd();
-        f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep); fmem = f.F11_.end();
-        f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep); fmem = f.F12_.end();
-        f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem = f.F21_.end();
+	std::size_t dsep = f.dim_sep();
+	std::size_t dupd = f.dim_upd();
+        f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep);  fmem += dsep*dsep;
+        f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep);  fmem += dsep*dupd;
+	f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd);  fmem += dupd*dsep;
         if (dupd) {
           f.F22_ = DenseMW_t(dupd, dupd, smem, dupd);
-          smem = f.F22_.end();
+          smem += dupd*dupd;
         }
       }
+
+      assert(smem == schur_mem[lvl%2].get() + schur_mem_size);
+      assert(fmem == ldata.f[0]->factor_mem_.get() + factor_mem_size);
 
       long long level_flops = 0;
 #pragma omp parallel for if(l!=0) reduction(+:level_flops)
