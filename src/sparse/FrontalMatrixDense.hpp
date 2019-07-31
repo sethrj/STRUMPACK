@@ -233,9 +233,11 @@ namespace strumpack {
     // TODO put some logic here to decide when to do the level by
     // level factorization
 #if defined(STRUMPACK_USE_CUDA)
-    factorization_by_level(A, opts);
-    return;
-#else
+    if (opts.use_gpu()) {
+      factorization_by_level(A, opts);
+      return;
+    }
+#endif
     if (task_depth == 0) {
       // use tasking for children and for extend-add parallelism
 #pragma omp parallel if(!omp_in_parallel()) default(shared)
@@ -246,15 +248,8 @@ namespace strumpack {
       factor_phase2(A, opts, etree_level, params::task_recursion_cutoff_level);
     } else {
       factor_phase1(A, opts, etree_level, task_depth);
-// #if defined(STRUMPACK_USE_CUDA)
-//       if (dim_sep()+dim_upd() > 100)
-//         cuda_factor_phase2(A, opts, etree_level, task_depth);
-//       else
-//         factor_phase2(A, opts, etree_level, task_depth);
-// #else
       factor_phase2(A, opts, etree_level, task_depth);
     }
-#endif
   }
 
   template<typename scalar_t,typename integer_t> void
@@ -789,13 +784,13 @@ namespace strumpack {
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
   (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
-    int cutoff_size = 500;
+    int cutoff_size = opts.cuda_cutoff();
     using uniq_scalar_t = std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>;
     auto cuda_deleter = [](void* ptr) { cudaFree(ptr); };
 
     int device_id;
     cudaGetDevice(&device_id);
-    const int max_streams = 10;
+    const int max_streams = opts.cuda_streams();
     std::vector<cudaStream_t> streams(max_streams);
     std::vector<cublasHandle_t> blas_handle(max_streams);
     std::vector<cusolverDnHandle_t> solver_handle(max_streams);

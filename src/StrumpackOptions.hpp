@@ -807,6 +807,10 @@ namespace strumpack {
 
     void set_write_root_front(bool b)  { _write_root_front = b; }
 
+    void enable_gpu()  { use_gpu_ = true; }
+    void disable_gpu()  { use_gpu_ = false; }
+    void set_cuda_cutoff(int c) { cuda_cutoff_ = c; }
+    void set_cuda_streams(int s) { cuda_streams_ = s; }
 
     /**
      * Check if verbose output is enabled.
@@ -1062,6 +1066,10 @@ namespace strumpack {
      */
     bool write_root_front() const { return _write_root_front; }
 
+    bool use_gpu() const { return use_gpu_; }
+    int cuda_cutoff() const { return cuda_cutoff_; }
+    int cuda_streams() const { return cuda_streams_; }
+
     /**
      * Get a (const) reference to an object holding various options
      * pertaining to the HSS code, and data structures.
@@ -1171,6 +1179,10 @@ namespace strumpack {
         {"sp_components",                required_argument, 0, 43},
         {"sp_separator_width",           required_argument, 0, 44},
         {"sp_write_root_front",          no_argument, 0, 45},
+        {"sp_enable_gpu",                no_argument, 0, 46},
+        {"sp_disable_gpu",               no_argument, 0, 47},
+	{"sp_cuda_cutoff",               required_argument, 0, 48},
+	{"sp_cuda_streams",              required_argument, 0, 49},
         {"sp_verbose",                   no_argument, 0, 'v'},
         {"sp_quiet",                     no_argument, 0, 'q'},
         {"help",                         no_argument, 0, 'h'},
@@ -1358,6 +1370,18 @@ namespace strumpack {
           set_separator_width(_separator_width);
         } break;
         case 45: set_write_root_front(true); break;
+        case 46: enable_gpu(); break;
+        case 47: disable_gpu(); break;
+        case 48: {
+          std::istringstream iss(optarg);
+          iss >> cuda_cutoff_;
+          set_cuda_cutoff(cuda_cutoff_);
+        } break;
+        case 49: {
+          std::istringstream iss(optarg);
+          iss >> cuda_streams_;
+          set_cuda_streams(cuda_streams_);
+        } break;
         case 'h': { describe_options(); } break;
         case 'v': set_verbose(true); break;
         case 'q': set_verbose(false); break;
@@ -1496,6 +1520,14 @@ namespace strumpack {
       std::cout << "#   --sp_enable_replace_tiny_pivots" << std::endl;
       std::cout << "#   --sp_disable_replace_tiny_pivots" << std::endl;
       std::cout << "#   --sp_write_root_front" << std::endl;
+      std::cout << "#   --sp_enable_GPU" << std::endl;
+      std::cout << "#   --sp_disable_GPU" << std::endl;
+      std::cout << "#   --sp_cuda_cutoff (default "
+                << cuda_cutoff() << ")" << std::endl
+                << "#          CUDA kernel/CUBLAS cutoff size" << std::endl;
+      std::cout << "#   --sp_cuda_streams (default "
+                << cuda_streams() << ")" << std::endl
+                << "#          number of CUDA streams " << std::endl;
       std::cout << "#   --sp_verbose or -v (default " << verbose() << ")"
                 << std::endl;
       std::cout << "#   --sp_quiet or -q (default " << !verbose() << ")"
@@ -1529,6 +1561,11 @@ namespace strumpack {
     bool _log_assembly_tree = false;
     bool _replace_tiny_pivots = false;
     bool _write_root_front = false;
+
+    /** GPU options */
+    bool use_gpu_ = true;
+    int cuda_cutoff_ = 500;
+    int cuda_streams_ = 10;
 
     /** compression options */
     CompressionType _comp = CompressionType::NONE;
