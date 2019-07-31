@@ -140,6 +140,10 @@ namespace strumpack {
 
     std::string type() const override { return "FrontalMatrixDense"; }
 
+#if defined(STRUMPACK_USE_CUDA)
+    void factorization_by_level_cuda
+    (const SpMat_t& A, const SPOptions<scalar_t>& opts);
+#endif
     void factorization_by_level
     (const SpMat_t& A, const SPOptions<scalar_t>& opts);
     void setup_level
@@ -233,11 +237,11 @@ namespace strumpack {
     // TODO put some logic here to decide when to do the level by
     // level factorization
 #if defined(STRUMPACK_USE_CUDA)
-    if (opts.use_gpu()) {
-      factorization_by_level(A, opts);
-      return;
-    }
-#endif
+    if (opts.use_gpu())
+      factorization_by_level_cuda(A, opts);
+    else factorization_by_level(A, opts);
+    return;
+#else
     if (task_depth == 0) {
       // use tasking for children and for extend-add parallelism
 #pragma omp parallel if(!omp_in_parallel()) default(shared)
@@ -250,6 +254,7 @@ namespace strumpack {
       factor_phase1(A, opts, etree_level, task_depth);
       factor_phase2(A, opts, etree_level, task_depth);
     }
+#endif
   }
 
   template<typename scalar_t,typename integer_t> void
@@ -782,7 +787,7 @@ namespace strumpack {
 
 #if defined(STRUMPACK_USE_CUDA)
   template<typename scalar_t,typename integer_t> void
-  FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
+  FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level_cuda
   (const SpMat_t& A, const SPOptions<scalar_t>& opts) {
     int cutoff_size = opts.cuda_cutoff();
     using uniq_scalar_t = std::unique_ptr<scalar_t[],std::function<void(scalar_t*)>>;
@@ -844,7 +849,7 @@ namespace strumpack {
 
     void* all_work_mem = nullptr;
     cudaMallocManaged(&all_work_mem, max_level_work_mem_size*2);
-    void* work_mem[2] = {all_work_mem, all_work_mem + max_level_work_mem_size};
+    void* work_mem[2] = {all_work_mem, (char*)all_work_mem + max_level_work_mem_size};
 
     for (int lvl=0; lvl<lvls; lvl++) {
       TaskTimer tl("");
@@ -950,6 +955,7 @@ namespace strumpack {
 	(ldata[l].f[0]->factor_mem_.get(),
 	 ldata[l].factor_mem_size*sizeof(scalar_t), device_id, 0);
 
+      long long level_flops = 0;
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata[l].f[n]);
         auto stream = n % max_streams;
@@ -978,12 +984,13 @@ namespace strumpack {
             } 
           }
         }
-	STRUMPACK_FULL_RANK_FLOPS
-	  (LU_flops(f.F11_) +
-	   gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
-	   trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
-	   trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
+	level_flops += LU_flops(f.F11_) +
+	  gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
+	  trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
+	  trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_);
       }
+      STRUMPACK_FULL_RANK_FLOPS(level_flops);
+      STRUMPACK_FLOPS(level_flops);
       if (ldata[l].nnodes_small) {
 	dim3 bt(8, 8);
 	cuda::partialLUWrapper
@@ -1005,9 +1012,14 @@ namespace strumpack {
 	f.piv.resize(dsep);
 	std::copy(ldata[l].ppiv[n], ldata[l].ppiv[n]+dsep, f.piv.data());
       }
-
-      std::cout << "#  Factorization complete, took: " 
-		<< tl.elapsed() << " seconds" << std::endl;
+      if (opts.verbose()) {
+	auto level_time = tl.elapsed();
+	std::cout << "#  GPU Factorization complete, took: " 
+		  << level_time << " seconds, " 
+		  << level_flops / 1.e9 << " GFLOPS, "
+		  << (float(level_flops) / level_time) / 1.e9 
+		  << " GFLOP/s" << std::endl;
+      }
     }
     cudaFree(all_work_mem);
     for (int i=0; i<max_streams; i++) {
@@ -1016,8 +1028,7 @@ namespace strumpack {
       cusolverDnDestroy(solver_handle[i]);
     }
   }
-
-#else
+#endif
 
   template<typename scalar_t,typename integer_t> void
   FrontalMatrixDense<scalar_t,integer_t>::factorization_by_level
@@ -1027,6 +1038,8 @@ namespace strumpack {
     std::unique_ptr<scalar_t[]> schur_mem[2];
     int lvls = this->levels();
     for (int lvl=0; lvl<lvls; lvl++) {
+      TaskTimer tl("");
+      tl.start();
       int l = lvls - lvl - 1;
       LevelInfo_t ldata;
       setup_level(A, opts, ldata, l);
@@ -1049,6 +1062,7 @@ namespace strumpack {
                   << " MB for Schur complements"
                   << std::endl;
 
+
       ldata.f[0]->factor_mem_ = uniq_scalar_t(new scalar_t[factor_mem_size], def_deleter);
       auto fmem = ldata.f[0]->factor_mem_.get();
       schur_mem[lvl % 2] = std::unique_ptr<scalar_t[]>(new scalar_t[schur_mem_size]);
@@ -1067,7 +1081,8 @@ namespace strumpack {
         }
       }
 
-#pragma omp parallel for if(l!=0)
+      long long level_flops = 0;
+#pragma omp parallel for if(l!=0) reduction(+:level_flops)
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata.f[n]);
         const auto dsep = f.dim_sep();
@@ -1093,15 +1108,23 @@ namespace strumpack {
                  scalar_t(1.), f.F22_, 0);
           }
         }
-        STRUMPACK_FULL_RANK_FLOPS
-          (LU_flops(f.F11_) +
-           gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
-           trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
-           trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_));
+	level_flops += 
+	  LU_flops(f.F11_) +
+	  gemm_flops(Trans::N, Trans::N, scalar_t(-1.), f.F21_, f.F12_, scalar_t(1.)) +
+	  trsm_flops(Side::L, scalar_t(1.), f.F11_, f.F12_) +
+	  trsm_flops(Side::R, scalar_t(1.), f.F11_, f.F21_);
+      }
+      STRUMPACK_FULL_RANK_FLOPS(level_flops);
+      if (opts.verbose()) {
+	auto level_time = tl.elapsed();
+	std::cout << "#  CPU Factorization complete, took: " 
+		  << level_time << " seconds, " 
+		  << level_flops / 1.e9 << " GFLOPS, "
+		  << (float(level_flops) / level_time) / 1.e9 
+		  << " GFLOP/s" << std::endl;
       }
     }
   }
-#endif
 
 } // end namespace strumpack
 
