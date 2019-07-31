@@ -327,12 +327,13 @@ namespace strumpack {
       double* A22 = l_A22[blockIdx.x];
       int* piv = l_piv[blockIdx.x]; 
 
-
-      if (t_id_x == 0 && t_id_y == 0) {
-        for (int i=0; i<n1; i++) piv[i] = i+1; // fortran convention
-        for (int j=0; j<n1; j++) {
-          auto Amax = A11[j+j*n1];
-          int imax = j;
+      if (t_id_y == 0)
+        for (int i=t_id_x; i<n1; i+=blkdim_x)
+          piv[i] = i+1; // fortran convention
+      for (int j=0; j<n1; j++) {
+        auto Amax = A11[j+j*n1];
+        int imax = j;
+        if (t_id_x == 0 && t_id_y == 0) {
           // find pivot element
           for (int i=j+1; i<n1; i++) {
             if (fabs(A11[i+j*n1]) > fabs(Amax)) {
@@ -341,20 +342,27 @@ namespace strumpack {
             }
           }
           //if (Amax == 0) return j;
-          if (imax != j) {
+          if (imax != j)
             cuda::swap(piv[j], piv[imax]);
-            for (int i=0; i<n1; i++)
+        }
+	__syncthreads();
+        if (imax != j) {
+          if (t_id_y == 0)
+            for (int i=t_id_x; i<n1; i+=blkdim_x)
               cuda::swap(A11[imax+i*n1], A11[j+i*n1]);
-            for (int i=0; i<n2; i++)
+          if (t_id_y == 1)
+            for (int i=t_id_x; i<n2; i+=blkdim_x)
               cuda::swap(A12[imax+i*n1], A12[j+i*n1]);
-          }
-          double one = 1.0;
-          auto iAmax = one / Amax;
-          for (int i=j+1; i<n1; i++)
-            A11[i+j*n1] *= iAmax;
-          for (int i=j+1; i<n1; i++)
-            for (int k=j+1; k<n1; k++)
-              A11[k+i*n1] -= A11[k+j*n1] * A11[j+i*n1];
+        }
+        __syncthreads();
+        auto iAmax = 1.0 / Amax;
+        if (t_id_y == 0)
+          for (int i=j+1+t_id_x; i<n1; i+=blkdim_x)
+	    A11[i+j*n1] *= iAmax;
+        __syncthreads();
+        for (int i=j+1+t_id_x; i<n1; i+=blkdim_x) {
+          for (int k=j+1+t_id_y; k<n1; k+=blkdim_y)
+            A11[k+i*n1] -= A11[k+j*n1] * A11[j+i*n1];
         }
       }
       __syncthreads();

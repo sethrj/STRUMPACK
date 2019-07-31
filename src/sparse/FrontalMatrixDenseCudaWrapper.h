@@ -85,7 +85,7 @@ namespace strumpack {
     ///////////////////////////////////////////////////////////
     
     void partialLUWrapper
-    (int num_blocks, int threads_per_block, std::size_t* l_n1, 
+    (int num_blocks, dim3 threads_per_block, std::size_t* l_n1, 
      std::size_t* l_n2, double** l_A11, double** l_A12, double** l_A21, 
      double** l_A22, int** l_piv);
   }

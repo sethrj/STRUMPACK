@@ -507,6 +507,7 @@ install(FILES
   src/sparse/EliminationTree.hpp
   src/sparse/FrontalMatrix.hpp
   src/sparse/FrontalMatrixDense.hpp
+  src/sparse/FrontalMatrixDenseCudaWrapper.h
   src/sparse/FrontalMatrixHSS.hpp
   src/sparse/FrontalMatrixBLR.hpp
   src/sparse/FrontalMatrixHODLR.hpp
