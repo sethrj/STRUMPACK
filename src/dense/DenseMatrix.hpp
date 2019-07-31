@@ -1678,7 +1678,14 @@ namespace strumpack {
   DenseMatrix<scalar_t>::LU(int depth) {
     std::vector<int> piv(rows());
     int info = 0;
-    getrf_omp_task(rows(), cols(), data(), ld(), piv.data(), &info, depth);
+#if defined(_OPENMP)
+    bool in_par = omp_in_parallel();
+#else
+    bool in_par = false;
+#endif
+    if (in_par)
+      getrf_omp_task(rows(), cols(), data(), ld(), piv.data(), &info, depth);
+    else blas::getrf(rows(), cols(), data(), ld(), piv.data(), &info);
     if (info) {
       std::cerr << "ERROR: LU factorization failed with info="
                 << info << std::endl;
@@ -1729,9 +1736,19 @@ namespace strumpack {
     int info = 0;
     DenseMatrix<scalar_t> x(b);
     if (!rows()) return x;
-    getrs_omp_task
-      (char(Trans::N), rows(), b.cols(), data(), ld(), piv.data(),
-       x.data(), x.ld(), &info, depth);
+#if defined(_OPENMP)
+    bool in_par = omp_in_parallel();
+#else
+    bool in_par = false;
+#endif
+    if (in_par)
+      getrs_omp_task
+	(char(Trans::N), rows(), b.cols(), data(), ld(), piv.data(),
+	 x.data(), x.ld(), &info, depth);
+    else
+      blas::getrs
+	(char(Trans::N), rows(), b.cols(), data(), ld(), piv.data(),
+	 x.data(), x.ld(), &info);
     if (info) {
       std::cerr << "ERROR: LU solve failed with info=" << info << std::endl;
       exit(1);
@@ -1746,9 +1763,19 @@ namespace strumpack {
     assert(piv.size() >= rows());
     int info = 0;
     if (!rows()) return;
-    getrs_omp_task
-      (char(Trans::N), rows(), b.cols(), data(), ld(), piv.data(),
-       b.data(), b.ld(), &info, depth);
+#if defined(_OPENMP)
+    bool in_par = omp_in_parallel();
+#else
+    bool in_par = false;
+#endif
+    if (in_par)
+      getrs_omp_task
+	(char(Trans::N), rows(), b.cols(), data(), ld(), piv.data(),
+	 b.data(), b.ld(), &info, depth);
+    else 
+      blas::getrs
+	(char(Trans::N), rows(), b.cols(), data(), ld(), piv.data(),
+	 b.data(), b.ld(), &info);
     if (info) {
       std::cerr << "ERROR: LU solve failed with info=" << info << std::endl;
       exit(1);
