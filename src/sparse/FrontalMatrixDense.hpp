@@ -847,6 +847,10 @@ namespace strumpack {
 	(max_level_work_mem_size, ldata[l].total_work_mem_size);
     }
 
+    // std::cout << "max_level_work_mem_size=" << max_level_work_mem_size 
+    // 	      << " max_level_work_mem_size % 8 = " << (max_level_work_mem_size % 8) << std::endl;
+    max_level_work_mem_size += max_level_work_mem_size % 8;
+
     void* all_work_mem = nullptr;
     cudaMallocManaged(&all_work_mem, max_level_work_mem_size*2);
     void* work_mem[2] = {all_work_mem, (char*)all_work_mem + max_level_work_mem_size};
@@ -869,7 +873,6 @@ namespace strumpack {
       scalar_t* fmem = nullptr;
       cudaMallocManaged(&fmem, ldata[l].factor_mem_size*sizeof(scalar_t));
       ldata[l].f[0]->factor_mem_ = uniq_scalar_t(fmem, cuda_deleter);
-
       auto wmem = work_mem[l % 2];
 
       for (std::size_t n=0; n<nnodes; n++) {
@@ -881,7 +884,7 @@ namespace strumpack {
         f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem += dupd*dsep;
         if (dupd) {
           f.F22_ = DenseMW_t(dupd, dupd, static_cast<scalar_t*>(wmem), dupd);
-          wmem += dupd*dupd;
+          wmem = static_cast<scalar_t*>(wmem) + dupd*dupd;
         }
       }
 
@@ -920,6 +923,11 @@ namespace strumpack {
       ldata[l].ppiv_small = static_cast<int**>(wmem);
       wmem = static_cast<int**>(wmem) + ldata[l].nnodes_small;
 
+      ldata[l].getrf = static_cast<scalar_t*>(wmem);
+      wmem = static_cast<scalar_t*>(wmem) + max_streams * ldata[l].getrf_work_size;
+      ldata[l].getrf_err = static_cast<int*>(wmem);
+      wmem = static_cast<int*>(wmem) + max_streams;
+
       for (std::size_t n=0, idx=0; n<nnodes; n++) {
         auto& f = *(ldata[l].f[n]);
         const auto dsep = f.dim_sep();
@@ -941,12 +949,7 @@ namespace strumpack {
 	wmem = static_cast<int*>(wmem) + dsep;
       }
 
-      ldata[l].getrf = static_cast<scalar_t*>(wmem);
-      wmem = static_cast<scalar_t*>(wmem) + max_streams * ldata[l].getrf_work_size;
-      ldata[l].getrf_err = static_cast<int*>(wmem);
-      wmem = static_cast<int*>(wmem) + max_streams;
-
-      assert(wmem == work_mem[l % 2] + ldata[l].total_work_mem_size);
+      //assert(wmem == work_mem[l % 2] + ldata[l].total_work_mem_size);
 
       // prefetch to GPU
       cudaMemPrefetchAsync
