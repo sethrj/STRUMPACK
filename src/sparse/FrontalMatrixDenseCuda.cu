@@ -312,15 +312,15 @@ namespace strumpack {
     }
 
     __global__ void partialLU
-    (size_t* l_n1, size_t* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
+    (int* l_n1, int* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
 
       int t_id_x = threadIdx.x;
       int t_id_y = threadIdx.y;
       int blkdim_x = blockDim.x;
       int blkdim_y = blockDim.y;
 
-      size_t n1 = l_n1[blockIdx.x];
-      size_t n2 = l_n2[blockIdx.x];
+      int n1 = l_n1[blockIdx.x];
+      int n2 = l_n2[blockIdx.x];
       double* A11 = l_A11[blockIdx.x];
       double* A12 = l_A12[blockIdx.x];
       double* A21 = l_A21[blockIdx.x];
@@ -386,11 +386,77 @@ namespace strumpack {
     }
 
     void partialLUWrapper
-    (int num_blocks, dim3 threads_per_block, size_t* l_n1, 
-     size_t* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
+    (int num_blocks, dim3 threads_per_block, int* l_n1, 
+     int* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
        partialLU<<<num_blocks,threads_per_block>>>
          (l_n1, l_n2, l_A11, l_A12, l_A21, l_A22, l_piv);
     }
   }
+
+
+    __global__ void LUkernel
+    (int* l_n1, int* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
+
+      int t_id_x = threadIdx.x;
+      int t_id_y = threadIdx.y;
+      int blkdim_x = blockDim.x;
+      int blkdim_y = blockDim.y;
+
+      int n1 = l_n1[blockIdx.x];
+      int n2 = l_n2[blockIdx.x];
+      double* A11 = l_A11[blockIdx.x];
+      double* A12 = l_A12[blockIdx.x];
+      double* A21 = l_A21[blockIdx.x];
+      double* A22 = l_A22[blockIdx.x];
+      int* piv = l_piv[blockIdx.x]; 
+
+      if (t_id_y == 0)
+        for (int i=t_id_x; i<n1; i+=blkdim_x)
+          piv[i] = i+1; // fortran convention
+      for (int j=0; j<n1; j++) {
+        auto Amax = A11[j+j*n1];
+        int imax = j;
+        if (t_id_x == 0 && t_id_y == 0) {
+          // find pivot element
+          for (int i=j+1; i<n1; i++) {
+            if (fabs(A11[i+j*n1]) > fabs(Amax)) {
+              Amax = A11[i+j*n1];
+              imax = i;
+            }
+          }
+          //if (Amax == 0) return j;
+          if (imax != j)
+            cuda::swap(piv[j], piv[imax]);
+        }
+	__syncthreads();
+        if (imax != j) {
+          if (t_id_y == 0)
+            for (int i=t_id_x; i<n1; i+=blkdim_x)
+              cuda::swap(A11[imax+i*n1], A11[j+i*n1]);
+          if (t_id_y == 1)
+            for (int i=t_id_x; i<n2; i+=blkdim_x)
+              cuda::swap(A12[imax+i*n1], A12[j+i*n1]);
+        }
+        __syncthreads();
+        auto iAmax = 1.0 / Amax;
+        if (t_id_y == 0)
+          for (int i=j+1+t_id_x; i<n1; i+=blkdim_x)
+	    A11[i+j*n1] *= iAmax;
+        __syncthreads();
+        for (int i=j+1+t_id_x; i<n1; i+=blkdim_x) {
+          for (int k=j+1+t_id_y; k<n1; k+=blkdim_y)
+            A11[k+i*n1] -= A11[k+j*n1] * A11[j+i*n1];
+        }
+      }
+    }
+
+    void LUkernelWrapper
+    (int num_blocks, dim3 threads_per_block, int* l_n1, 
+     int* l_n2, double** l_A11, double** l_A12, double** l_A21, double** l_A22, int** l_piv) {
+       LUkernel<<<num_blocks,threads_per_block>>>
+         (l_n1, l_n2, l_A11, l_A12, l_A21, l_A22, l_piv);
+    }
+  }
+
 }
 #endif

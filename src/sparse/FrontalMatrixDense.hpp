@@ -47,7 +47,12 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include "FrontalMatrixDenseCudaWrapper.h"
+#if defined(STRUMPACK_USE_MAGMA)
+# include "magma_v2.h"
 #endif
+#endif
+
+
 
 namespace strumpack {
 
@@ -64,8 +69,8 @@ namespace strumpack {
 
     std::size_t total_work_mem_size = 0;
 
-    std::size_t* dsep = nullptr;
-    std::size_t* dupd = nullptr;
+    int* dsep = nullptr;
+    int* dupd = nullptr;
     
     scalar_t **pF11 = nullptr;
     scalar_t **pF12 = nullptr;
@@ -805,6 +810,14 @@ namespace strumpack {
       cusolverDnCreate(&solver_handle[i]);
       cusolverDnSetStream(solver_handle[i], streams[i]);
     }
+
+#if defined(STRUMPACK_USE_MAGMA)
+    magma_init();
+    magma_queue_t queue = nullptr;
+    magma_int_t dev = 0;
+    magma_queue_create(dev, &queue);
+#endif
+
     int lvls = this->levels();
     std::vector<LevelInfo_t> ldata(lvls);
     std::size_t max_level_work_mem_size = 0;
@@ -838,7 +851,7 @@ namespace strumpack {
 	sizeof(int) * (ldata[l].piv_mem_size) +
 	ldata[l].nnodes_small * 
 	// pointers to F11, F12, F21, F22, piv, dsep, dupd for all small fronts
-	(4*sizeof(scalar_t*) + sizeof(int*) + 2*sizeof(std::size_t)) +
+	(4*sizeof(scalar_t*) + sizeof(int*) + 2*sizeof(int)) +
 	// pointers to all piv vectors
 	nnodes*sizeof(scalar_t*) +
 	// getrf error code
@@ -877,8 +890,8 @@ namespace strumpack {
 
       for (std::size_t n=0; n<nnodes; n++) {
         auto& f = *(ldata[l].f[n]);
-        const std::size_t dsep = f.dim_sep();
-        const std::size_t dupd = f.dim_upd();
+        const int dsep = f.dim_sep();
+        const int dupd = f.dim_upd();
         f.F11_ = DenseMW_t(dsep, dsep, fmem, dsep); fmem += dsep*dsep;
         f.F12_ = DenseMW_t(dsep, dupd, fmem, dsep); fmem += dsep*dupd;
         f.F21_ = DenseMW_t(dupd, dsep, fmem, dupd); fmem += dupd*dsep;
@@ -913,11 +926,6 @@ namespace strumpack {
       ldata[l].pF22 = static_cast<scalar_t**>(wmem);
       wmem = static_cast<scalar_t**>(wmem) + ldata[l].nnodes_small;
 
-      ldata[l].dsep = static_cast<std::size_t*>(wmem);
-      wmem = static_cast<std::size_t*>(wmem) + ldata[l].nnodes_small;
-      ldata[l].dupd = static_cast<std::size_t*>(wmem);
-      wmem = static_cast<std::size_t*>(wmem) + ldata[l].nnodes_small;
-
       ldata[l].ppiv = static_cast<int**>(wmem);
       wmem = static_cast<int**>(wmem) + nnodes;
       ldata[l].ppiv_small = static_cast<int**>(wmem);
@@ -927,6 +935,11 @@ namespace strumpack {
       wmem = static_cast<scalar_t*>(wmem) + max_streams * ldata[l].getrf_work_size;
       ldata[l].getrf_err = static_cast<int*>(wmem);
       wmem = static_cast<int*>(wmem) + max_streams;
+
+      ldata[l].dsep = static_cast<int*>(wmem);
+      wmem = static_cast<int*>(wmem) + ldata[l].nnodes_small;
+      ldata[l].dupd = static_cast<int*>(wmem);
+      wmem = static_cast<int*>(wmem) + ldata[l].nnodes_small;
 
       for (std::size_t n=0, idx=0; n<nnodes; n++) {
         auto& f = *(ldata[l].f[n]);
@@ -994,6 +1007,33 @@ namespace strumpack {
       }
       STRUMPACK_FULL_RANK_FLOPS(level_flops);
       STRUMPACK_FLOPS(level_flops);
+
+#if defined(STRUMPACK_USE_MAGMA)
+      if (ldata[l].nnodes_small) {
+	dim3 bt(8, 8);
+	cuda::LUkernelWrapper
+          (ldata[l].nnodes_small, bt, ldata[l].dsep, ldata[l].dupd, 
+	   ldata[l].pF11, ldata[l].pF12, ldata[l].pF21, ldata[l].pF22, 
+	   ldata[l].ppiv_small);
+
+	magmablas_dtrsm_vbatched
+	  (MagmaLeft, MagmaLower, MagmaNoTrans, MagmaUnit, 
+	   ldata[l].dsep, ldata[l].dupd, scalar_t(1.),
+	   ldata[l].pF11, ldata[l].dsep, ldata[l].pF12, ldata[l].dsep,
+	   ldata[l].nnodes_small, queue);
+	magmablas_dtrsm_vbatched
+	  (MagmaLeft, MagmaUpper, MagmaNoTrans, MagmaNonUnit, 
+	   ldata[l].dsep, ldata[l].dupd, scalar_t(1.),
+	   ldata[l].pF11, ldata[l].dsep, ldata[l].pF12, ldata[l].dsep,
+	   ldata[l].nnodes_small, queue);
+	magmablas_dgemm_vbatched
+	  (MagmaNoTrans, MagmaNoTrans, 
+	   ldata[l].dupd, ldata[l].dupd, ldata[l].dsep, 
+	   scalar_t(-1.), ldata[l].pF21, ldata[l].dupd,
+	   ldata[l].pF12, ldata[l].dsep, scalar_t(1.),
+	   ldata[l].pF22, ldata[l].dupd, ldata[l].nnodes_small, queue);
+      }
+#else
       if (ldata[l].nnodes_small) {
 	dim3 bt(8, 8);
 	cuda::partialLUWrapper
@@ -1001,6 +1041,7 @@ namespace strumpack {
 	   ldata[l].pF11, ldata[l].pF12, ldata[l].pF21, ldata[l].pF22, 
 	   ldata[l].ppiv_small);
       }
+#endif
       cudaDeviceSynchronize();
 
       // prefetch from device
@@ -1024,7 +1065,14 @@ namespace strumpack {
 		  << " GFLOP/s" << std::endl;
       }
     }
+
     cudaFree(all_work_mem);
+
+#if defined(STRUMPACK_USE_MAGMA)
+    magma_queue_destroy(queue);
+    magma_finalize();
+#endif
+
     for (int i=0; i<max_streams; i++) {
       cudaStreamDestroy(streams[i]);
       cublasDestroy(blas_handle[i]);

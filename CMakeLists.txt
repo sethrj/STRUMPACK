@@ -10,6 +10,8 @@ option(STRUMPACK_USE_OPENMP "Use OpenMP for on-node threading tasking" ON)
 option(STRUMPACK_USE_CUDA "Use CUDA for GPU support" ON)
 
 option(TPL_ENABLE_SLATE "Use SLATE, the ECP ScaLAPACK replacement" OFF)
+option(TPL_ENABLE_MAGMA "Use MAGMA" ON)
+
 option(TPL_ENABLE_PARMETIS "Build with support for ParMetis" OFF)
 option(TPL_ENABLE_SCOTCH "Build with support for Scotch/PTScotch" OFF)
 option(TPL_ENABLE_PAPI "Build with support for PAPI monitoring" OFF)
@@ -45,6 +47,14 @@ if(NOT STRUMPACK_USE_MPI)
     set(TPL_ENABLE_BPACK OFF)
   endif()
 endif()
+
+if(NOT STRUMPACK_USE_CUDA)
+  if(TPL_ENABLE_MAGMA)
+    message(STATUS "Disabling MAGMA. MAGMA requires CUDA support, which is not enabled.")
+    set(TPL_ENABLE_MAGMA OFF)
+  endif()
+endif()
+
 
 set(STRUMPACK_VERSION_MAJOR 3)
 set(STRUMPACK_VERSION_MINOR 1)
@@ -209,6 +219,18 @@ if(NOT STRUMPACK_ATOMICS_WITHOUT_LIB)
   endif()
 endif()
 
+if(TPL_ENABLE_MAGMA)
+  message(STATUS "Enabling MAGMA")
+  option(STRUMPACK_USE_MAGMA "" ON)
+  if(DEFINED TPL_SLATE_LIBRARIES)
+    set(LIBS ${LIBS} ${TPL_MAGMA_LIBRARIES})
+    include_directories(${TPL_MAGMA_INCLUDE_DIRS})
+  else()
+    message(WARNING "Could not find MAGMA,"
+     " please define TPL_MAGMA_LIBRARIES and TPL_MAGMA_INCLUDE_DIRS")
+  endif()
+endif()
+
 if(DEFINED TPL_BLAS_LIBRARIES)
   set(LIBS ${LIBS} ${TPL_BLAS_LIBRARIES})
 else()
@@ -294,6 +316,7 @@ if(TPL_ENABLE_SLATE)
      " please define TPL_SLATE_LIBRARIES and TPL_SLATE_INCLUDE_DIRS")
   endif()
 endif()
+
 
 if(STRUMPACK_USE_MPI)
   if(TPL_ENABLE_COMBBLAS)
