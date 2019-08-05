@@ -391,7 +391,6 @@ namespace strumpack {
        partialLU<<<num_blocks,threads_per_block>>>
          (l_n1, l_n2, l_A11, l_A12, l_A21, l_A22, l_piv);
     }
-  }
 
 
     __global__ void LUkernel
@@ -433,7 +432,7 @@ namespace strumpack {
           if (t_id_y == 0)
             for (int i=t_id_x; i<n1; i+=blkdim_x)
               cuda::swap(A11[imax+i*n1], A11[j+i*n1]);
-          if (t_id_y == 1)
+	  if (t_id_y == 1)
             for (int i=t_id_x; i<n2; i+=blkdim_x)
               cuda::swap(A12[imax+i*n1], A12[j+i*n1]);
         }
@@ -448,6 +447,24 @@ namespace strumpack {
             A11[k+i*n1] -= A11[k+j*n1] * A11[j+i*n1];
         }
       }
+      // __syncthreads();
+      // // trsm with L and U
+      // for (int k=t_id_x + blkdim_x*t_id_y; k<n2; k+=blkdim_x*blkdim_y) {
+      //   for (int i=0; i<n1; i++)
+      //     for (int j=0; j<i; j++)
+      //       A12[i+k*n1] -= A11[i+j*n1] * A12[j+k*n1];
+      //   for (int i=n1-1; i>=0; i--) {
+      //     for (int j=i+1; j<n1; j++)
+      //       A12[i+k*n1] -= A11[i+j*n1] * A12[j+k*n1];
+      //     A12[i+k*n1] /= A11[i+i*n1];
+      //   }
+      // }
+      // __syncthreads();
+      // // gemm
+      // for (int j=t_id_x; j<n2; j+=blkdim_x)
+      //   for (int i=t_id_y; i<n2; i+=blkdim_y)
+      //     for (int k=0; k<n1; k++)
+      //       A22[i+j*n2] -= A21[i+k*n2] * A12[k+j*n1];
     }
 
     void LUkernelWrapper
